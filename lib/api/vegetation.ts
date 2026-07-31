@@ -1,8 +1,8 @@
 /**
  * Vegetation / shade density (NDVI) per zone.
  *
- * Urban values: Earth Engine Sentinel-2 median (2026-06-01 → 2026-07-31).
- * Rural values: provisional estimates until EE script is re-run for new points.
+ * All values: Earth Engine Sentinel-2 SR median (2026-06-01 → 2026-07-31).
+ * Urban: 800m buffer · Rural: 1000m buffer · cloud < 30%.
  */
 
 import { CACHE_TTL, getCached, setCache } from './cache.js';
@@ -30,16 +30,16 @@ const STATIC_NDVI: Record<
   'zone-g11': { vegetationIndex: 0.23, shadeCoverage: 23, asOfDate: '2026-07-31' },
   'zone-i8': { vegetationIndex: 0.28, shadeCoverage: 28, asOfDate: '2026-07-31' },
   'zone-diplomatic': { vegetationIndex: 0.41, shadeCoverage: 41, asOfDate: '2026-07-31' },
-  // Provisional rural (replace after EE run — expect higher canopy)
-  'zone-bharakahu': { vegetationIndex: 0.52, shadeCoverage: 52, asOfDate: '2026-07-31' },
-  'zone-banigala': { vegetationIndex: 0.58, shadeCoverage: 58, asOfDate: '2026-07-31' },
-  'zone-nilore': { vegetationIndex: 0.48, shadeCoverage: 48, asOfDate: '2026-07-31' },
-  'zone-chirah': { vegetationIndex: 0.55, shadeCoverage: 55, asOfDate: '2026-07-31' },
-  'zone-tarnol': { vegetationIndex: 0.44, shadeCoverage: 44, asOfDate: '2026-07-31' },
-  'zone-golra': { vegetationIndex: 0.5, shadeCoverage: 50, asOfDate: '2026-07-31' },
-  'zone-sihala': { vegetationIndex: 0.46, shadeCoverage: 46, asOfDate: '2026-07-31' },
-  'zone-rawat': { vegetationIndex: 0.38, shadeCoverage: 38, asOfDate: '2026-07-31' },
-  'zone-koral': { vegetationIndex: 0.49, shadeCoverage: 49, asOfDate: '2026-07-31' },
+  // Earth Engine Sentinel-2 SR median (2026-06-01 → 2026-07-31, 1000m buffer)
+  'zone-bharakahu': { vegetationIndex: 0.19, shadeCoverage: 19, asOfDate: '2026-07-31' },
+  'zone-banigala': { vegetationIndex: 0.47, shadeCoverage: 47, asOfDate: '2026-07-31' },
+  'zone-nilore': { vegetationIndex: 0.26, shadeCoverage: 26, asOfDate: '2026-07-31' },
+  'zone-chirah': { vegetationIndex: 0.31, shadeCoverage: 31, asOfDate: '2026-07-31' },
+  'zone-tarnol': { vegetationIndex: 0.24, shadeCoverage: 24, asOfDate: '2026-07-31' },
+  'zone-golra': { vegetationIndex: 0.28, shadeCoverage: 28, asOfDate: '2026-07-31' },
+  'zone-sihala': { vegetationIndex: 0.37, shadeCoverage: 37, asOfDate: '2026-07-31' },
+  'zone-rawat': { vegetationIndex: 0.26, shadeCoverage: 26, asOfDate: '2026-07-31' },
+  'zone-koral': { vegetationIndex: 0.3, shadeCoverage: 30, asOfDate: '2026-07-31' },
 };
 
 export async function fetchVegetationForZone(zoneId: string): Promise<VegetationReading> {
