@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --canopy: #1F3D2E;
+    --canopy-light: #2D5843;
+    --canopy-dark: #14291F;
+    --sand: #EDE6D6;
+    --sand-light: #F7F4EC;
+    --sand-dark: #DDD3C1;
+    --risk-low: #4C8C6B;
+    --risk-medium: #D9A441;
+    --risk-high: #B5432A;
+    --ink: #23241F;
+    --ink-muted: #5C5E54;
+    --ink-faint: #8E9183;
+  }
+
+  body {
+    background-color: var(--sand);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: 'Archivo', sans-serif;
+  }
+
+  .font-mono-data {
+    font-family: 'IBM Plex Mono', monospace;
+  }
+}
+
+/* Signature Aedes aegypti striped motif accents */
+.aedes-stripe-accent {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #23241F 0px,
+    #23241F 3px,
+    #EDE6D6 3px,
+    #EDE6D6 7px
+  );
+}
+
+.aedes-stripe-accent-light {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.25) 0px,
+    rgba(255, 255, 255, 0.25) 3px,
+    transparent 3px,
+    transparent 7px
+  );
+}
+
+.aedes-stripe-border {
+  border-image: repeating-linear-gradient(
+    45deg,
+    #23241F 0,
+    #23241F 4px,
+    #EDE6D6 4px,
+    #EDE6D6 8px
+  ) 4;
+}
+
+/* Custom scrollbars matching sand/canopy theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #EDE6D6;
+}
+::-webkit-scrollbar-thumb {
+  background: #1F3D2E;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2D5843;
+}
+
+/* Leaflet map — keep tiles under UI chrome */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  font: inherit;
+  background: #1a2e24;
+  z-index: 0;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px;
+  background: rgba(31, 61, 46, 0.85) !important;
+  color: #ede6d6 !important;
+}
+
+.leaflet-control-attribution a {
+  color: #d9a441 !important;
+}
+
+.leaflet-tooltip {
+  background: #1f3d2e;
+  border: 1px solid #d9a441;
+  color: #ede6d6;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  box-shadow: none;
+  border-radius: 2px;
+}
+
+.leaflet-tooltip-top:before {
+  border-top-color: #d9a441;
+}
+

@@ -1,0 +1,6 @@
+{
+  "name": "Dengue Surveillance Dashboard",
+  "description": "Mosquito activity risk surveillance tool for Islamabad Capital Territory, Pakistan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
