@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CityConditions, ZoneData } from '../types';
+import type { InitialDashboardData } from '../types/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { loadDashboardFromSupabase } from '../../lib/loadDashboard';
 
@@ -35,27 +36,14 @@ function supabaseConfigured(): boolean {
 async function fetchViaApi(opts?: {
   live?: boolean;
   refresh?: boolean;
-}): Promise<{
-  zones: ZoneData[];
-  cityConditions: CityConditions;
-  freshness: FreshnessInfo;
-  mode: 'supabase' | 'live-build';
-  builtAt: string;
-}> {
+}): Promise<InitialDashboardData> {
   const params = new URLSearchParams();
   if (opts?.live) params.set('live', '1');
   if (opts?.refresh) params.set('refresh', '1');
   const qs = params.toString();
   const res = await fetch(`/api/dashboard${qs ? `?${qs}` : ''}`);
   const text = await res.text();
-  let data: {
-    error?: string;
-    zones?: ZoneData[];
-    cityConditions?: CityConditions;
-    freshness?: FreshnessInfo;
-    mode?: 'supabase' | 'live-build';
-    builtAt?: string;
-  };
+  let data: Partial<InitialDashboardData> & { error?: string };
   try {
     data = JSON.parse(text) as typeof data;
   } catch {
@@ -66,74 +54,97 @@ async function fetchViaApi(opts?: {
   if (!res.ok) {
     throw new Error(data.error || `Dashboard request failed (${res.status})`);
   }
-  if (!data.zones || !data.cityConditions || !data.freshness || !data.mode || !data.builtAt) {
+  if (
+    !data.zones ||
+    !data.cityConditions ||
+    !data.freshness ||
+    !data.mode ||
+    !data.builtAt
+  ) {
     throw new Error('Dashboard API returned an incomplete payload');
   }
-  return data as {
-    zones: ZoneData[];
-    cityConditions: CityConditions;
-    freshness: FreshnessInfo;
-    mode: 'supabase' | 'live-build';
-    builtAt: string;
-  };
+  return data as InitialDashboardData;
 }
 
-export function useDashboardData(): DashboardState {
-  const [zones, setZones] = useState<ZoneData[]>([]);
-  const [cityConditions, setCityConditions] = useState<CityConditions | null>(
-    null
+export function useDashboardData(
+  initialData?: InitialDashboardData | null
+): DashboardState {
+  const hasInitial = Boolean(
+    initialData?.zones?.length && initialData.cityConditions
   );
-  const [freshness, setFreshness] = useState<FreshnessInfo | null>(null);
-  const [mode, setMode] = useState<'supabase' | 'live-build' | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const [zones, setZones] = useState<ZoneData[]>(initialData?.zones ?? []);
+  const [cityConditions, setCityConditions] = useState<CityConditions | null>(
+    initialData?.cityConditions ?? null
+  );
+  const [freshness, setFreshness] = useState<FreshnessInfo | null>(
+    initialData?.freshness ?? null
+  );
+  const [mode, setMode] = useState<'supabase' | 'live-build' | null>(
+    initialData?.mode ?? null
+  );
+  const [loading, setLoading] = useState(!hasInitial);
   const [error, setError] = useState<string | null>(null);
-  const [builtAt, setBuiltAt] = useState<string | null>(null);
+  const [builtAt, setBuiltAt] = useState<string | null>(
+    initialData?.builtAt ?? null
+  );
 
-  const reload = useCallback(async (opts?: { live?: boolean; refresh?: boolean }) => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Prefer direct Supabase from the browser when configured (Step 7)
-      if (supabaseConfigured() && !opts?.live) {
-        try {
-          const supabase = createClient(
-            import.meta.env.VITE_SUPABASE_URL,
-            import.meta.env.VITE_SUPABASE_ANON_KEY
-          );
-          const payload = await loadDashboardFromSupabase(supabase);
-          setZones(payload.zones);
-          setCityConditions(payload.cityConditions);
-          setFreshness(payload.freshness);
-          setMode('supabase');
-          setBuiltAt(payload.builtAt);
-          return;
-        } catch (sbErr) {
-          console.warn(
-            '[useDashboardData] Supabase load failed, falling back to /api/dashboard',
-            sbErr
-          );
-        }
+  const reload = useCallback(
+    async (opts?: { live?: boolean; refresh?: boolean; soft?: boolean }) => {
+      if (!opts?.soft) {
+        setLoading(true);
       }
+      setError(null);
+      try {
+        if (supabaseConfigured() && !opts?.live) {
+          try {
+            const supabase = createClient(
+              import.meta.env.VITE_SUPABASE_URL,
+              import.meta.env.VITE_SUPABASE_ANON_KEY
+            );
+            const payload = await loadDashboardFromSupabase(supabase);
+            setZones(payload.zones);
+            setCityConditions(payload.cityConditions);
+            setFreshness(payload.freshness);
+            setMode('supabase');
+            setBuiltAt(payload.builtAt);
+            return;
+          } catch (sbErr) {
+            console.warn(
+              '[useDashboardData] Supabase load failed, falling back to /api/dashboard',
+              sbErr
+            );
+          }
+        }
 
-      const payload = await fetchViaApi({
-        live: opts?.live ?? !supabaseConfigured(),
-        refresh: opts?.refresh,
-      });
-      setZones(payload.zones);
-      setCityConditions(payload.cityConditions);
-      setFreshness(payload.freshness);
-      setMode(payload.mode);
-      setBuiltAt(payload.builtAt);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        const payload = await fetchViaApi({
+          live: opts?.live ?? !supabaseConfigured(),
+          refresh: opts?.refresh,
+        });
+        setZones(payload.zones);
+        setCityConditions(payload.cityConditions);
+        setFreshness(payload.freshness);
+        setMode(payload.mode);
+        setBuiltAt(payload.builtAt);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Failed to load dashboard data'
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
+    if (hasInitial) {
+      // Soft revalidate after hydration — keep SSR content visible
+      void reload({ soft: true });
+      return;
+    }
     void reload();
-  }, [reload]);
+  }, [hasInitial, reload]);
 
   return {
     zones,

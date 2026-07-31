@@ -1,8 +1,28 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/client",
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/dashboard", "destination": "/api/dashboard" },
+    { "source": "/api/cron/refresh", "destination": "/api/cron/refresh" },
+    { "source": "/api/ssr", "destination": "/api/ssr" },
+    {
+      "source": "/((?!assets/).*)",
+      "destination": "/api/ssr"
+    }
+  ],
   "functions": {
-    "api/**/*.ts": {
+    "api/dashboard.ts": {
       "maxDuration": 60,
       "includeFiles": "{lib/**,src/types.ts}"
+    },
+    "api/cron/refresh.ts": {
+      "maxDuration": 60,
+      "includeFiles": "{lib/**,src/types.ts}"
+    },
+    "api/ssr.ts": {
+      "maxDuration": 60,
+      "includeFiles": "{dist/**,lib/**,src/types.ts,src/types/**}"
     }
   },
   "crons": [

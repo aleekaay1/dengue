@@ -1,16 +1,22 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ZoneData, ActiveTab, MapOverlay } from './types';
+import type { InitialDashboardData } from './types/ssr';
 import { Header } from './components/Header';
 import { ConditionsStrip } from './components/ConditionsStrip';
-import { ZoneMap } from './components/ZoneMap';
+import { ZoneMapLazy } from './components/ZoneMapLazy';
 import { ZoneDetailPanel } from './components/ZoneDetailPanel';
 import { CityRiskOverview } from './components/CityRiskOverview';
 import { MethodologyPage } from './components/MethodologyPage';
 import { AdminDataView } from './components/AdminDataView';
+import { CrawlerDataBlock } from './components/CrawlerDataBlock';
 import { useDashboardData } from './hooks/useDashboardData';
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 
-export default function App() {
+interface AppProps {
+  initialData?: InitialDashboardData | null;
+}
+
+export default function App({ initialData = null }: AppProps) {
   const {
     zones: liveZones,
     cityConditions: liveCity,
@@ -19,11 +25,15 @@ export default function App() {
     error,
     builtAt,
     reload,
-  } = useDashboardData();
+  } = useDashboardData(initialData);
 
-  const [zones, setZones] = useState<ZoneData[]>([]);
-  const [cityConditions, setCityConditions] = useState(liveCity);
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [zones, setZones] = useState<ZoneData[]>(initialData?.zones ?? []);
+  const [cityConditions, setCityConditions] = useState(
+    initialData?.cityConditions ?? liveCity
+  );
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(
+    initialData?.zones?.[0]?.id ?? null
+  );
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [mapOverlay, setMapOverlay] = useState<MapOverlay>('risk');
   const [mapFullscreen, setMapFullscreen] = useState(false);
@@ -43,7 +53,6 @@ export default function App() {
     return zones.find((z) => z.id === selectedZoneId) || zones[0] || null;
   }, [zones, selectedZoneId]);
 
-  /** Always derive high-risk tally from the zones on screen (avoids strip/detail mismatch). */
   const displayConditions = useMemo(() => {
     if (!cityConditions) return null;
     const high = zones.filter((z) => z.riskLevel === 'high').length;
@@ -59,7 +68,9 @@ export default function App() {
   };
 
   const handleUpdateZone = (updatedZone: ZoneData) => {
-    setZones((prev) => prev.map((z) => (z.id === updatedZone.id ? updatedZone : z)));
+    setZones((prev) =>
+      prev.map((z) => (z.id === updatedZone.id ? updatedZone : z))
+    );
   };
 
   const handleRefresh = () => {
@@ -115,6 +126,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#EDE6D6] text-[#23241F] flex flex-col font-sans">
+      <CrawlerDataBlock
+        zones={zones}
+        cityConditions={displayConditions}
+        builtAt={builtAt}
+      />
+
       {showBanner && (
         <div className="bg-[#3A2A12] text-[#F5E6C8] border-b border-[#D9A441]/40 px-4 py-2 text-[11px] font-mono-data">
           <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -158,9 +175,7 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <div
             className={
-              mapFullscreen
-                ? ''
-                : 'grid lg:grid-cols-12 gap-5 items-start'
+              mapFullscreen ? '' : 'grid lg:grid-cols-12 gap-5 items-start'
             }
           >
             <div
@@ -168,7 +183,7 @@ export default function App() {
                 mapFullscreen ? '' : 'lg:col-span-7 xl:col-span-8 space-y-3'
               }
             >
-              <ZoneMap
+              <ZoneMapLazy
                 zones={zones}
                 selectedZoneId={selectedZoneId}
                 onSelectZone={handleSelectZone}

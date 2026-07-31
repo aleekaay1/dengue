@@ -8,8 +8,9 @@
   },
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview",
+    "build": "node scripts/build.mjs",
+    "build:client": "vite build --outDir dist/client",
+    "preview": "vite preview --outDir dist/client",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:weather": "tsx scripts/test-weather.ts",
