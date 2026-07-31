@@ -96,6 +96,8 @@ export async function buildDashboard(options?: {
       id: meta.id,
       name: meta.name,
       district: meta.district,
+      tehsil: meta.tehsil,
+      areaType: meta.areaType,
       coordinates: meta.coordinates,
       svgPolygonPath: meta.svgPolygonPath,
       svgLabelCoord: meta.svgLabelCoord,

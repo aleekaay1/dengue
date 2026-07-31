@@ -15,10 +15,16 @@ export interface ContributingFactor {
   maxContribution?: number;
 }
 
+export type AreaType = 'urban' | 'rural';
+
 export interface ZoneData {
   id: string;
   name: string;
+  /** Islamabad Urban | Islamabad Rural */
   district: string;
+  /** Surveillance tehsil / circle */
+  tehsil: string;
+  areaType: AreaType;
   coordinates: { lat: number; lng: number };
   svgPolygonPath: string; // SVG path data for spatial rendering
   svgLabelCoord: { x: number; y: number }; // Relative coordinates for map label placement

@@ -40,7 +40,8 @@ export const CityRiskOverview: React.FC<CityRiskOverviewProps> = ({
         filter.riskLevel === 'all' || zone.riskLevel === filter.riskLevel;
       const matchesSearch =
         zone.name.toLowerCase().includes(filter.searchQuery.toLowerCase()) ||
-        zone.district.toLowerCase().includes(filter.searchQuery.toLowerCase());
+        zone.district.toLowerCase().includes(filter.searchQuery.toLowerCase()) ||
+        zone.tehsil.toLowerCase().includes(filter.searchQuery.toLowerCase());
       return matchesRisk && matchesSearch;
     })
     .sort((a, b) => {
@@ -65,6 +66,8 @@ export const CityRiskOverview: React.FC<CityRiskOverviewProps> = ({
       'Zone ID',
       'Zone Name',
       'District',
+      'Tehsil',
+      'Area Type',
       'Risk Level',
       'Risk Score',
       'Temp (C)',
@@ -79,6 +82,8 @@ export const CityRiskOverview: React.FC<CityRiskOverviewProps> = ({
       z.id,
       `"${z.name}"`,
       `"${z.district}"`,
+      `"${z.tehsil}"`,
+      z.areaType,
       z.riskLevel.toUpperCase(),
       z.riskScore,
       z.temperature,
@@ -119,7 +124,7 @@ export const CityRiskOverview: React.FC<CityRiskOverviewProps> = ({
           <Search className="w-4 h-4 text-[#EDE6D6]/50 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search neighborhood or district (e.g. Gulberg, Cantt)..."
+            placeholder="Search zone, district, or tehsil (e.g. Bharakahu, Urban Core)..."
             value={filter.searchQuery}
             onChange={(e) =>
               setFilter((prev) => ({ ...prev, searchQuery: e.target.value }))
@@ -267,7 +272,7 @@ export const CityRiskOverview: React.FC<CityRiskOverviewProps> = ({
                           {zone.name}
                         </div>
                         <div className="text-[10px] text-[#5C5E54] font-mono-data">
-                          {zone.district}
+                          {zone.district} · {zone.tehsil} · {zone.areaType}
                         </div>
                       </td>
 

@@ -7,6 +7,9 @@ import { calculateRisk, defaultPrecautions } from './riskModel.js';
 import type { CityConditions, ZoneData } from '../src/types.js';
 import type { DataFreshness, DashboardPayload } from './buildDashboard.js';
 import { isDengueDataStale } from './api/dengueCases.js';
+import { ZONE_META } from './zoneMeta.js';
+
+const META_BY_ID = new Map(ZONE_META.map((z) => [z.id, z]));
 
 interface ZoneRow {
   id: string;
@@ -147,10 +150,14 @@ export async function loadDashboardFromSupabase(
       ? `${reading.date} (weather as of ${reading.weather_as_of})`
       : reading.date;
 
+    const meta = META_BY_ID.get(z.id);
+
     builtZones.push({
       id: z.id,
       name: z.name,
-      district: z.district,
+      district: meta?.district ?? z.district,
+      tehsil: meta?.tehsil ?? z.district,
+      areaType: meta?.areaType ?? 'urban',
       coordinates: { lat: z.lat, lng: z.lng },
       svgPolygonPath: z.svg_polygon_path,
       svgLabelCoord: { x: z.svg_label_x, y: z.svg_label_y },

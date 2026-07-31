@@ -74,9 +74,20 @@ Islamabad / ICT Health Vector Intelligence System`;
 
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-xs text-[#D9A441] font-mono-data mb-0.5">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[#D9A441] font-mono-data mb-0.5">
               <MapPin className="w-3.5 h-3.5 shrink-0" />
               <span>{zone.district}</span>
+              <span className="text-[#EDE6D6]/30">·</span>
+              <span className="uppercase">{zone.tehsil}</span>
+              <span
+                className={`ml-0.5 px-1.5 py-0.5 rounded-xs text-[10px] font-bold ${
+                  zone.areaType === 'rural'
+                    ? 'bg-[#4C8C6B]/30 text-[#A8D5B5]'
+                    : 'bg-[#D9A441]/25 text-[#D9A441]'
+                }`}
+              >
+                {zone.areaType}
+              </span>
             </div>
             <h2 className="text-xl font-extrabold font-heading uppercase text-[#EDE6D6] tracking-tight">
               {zone.name}

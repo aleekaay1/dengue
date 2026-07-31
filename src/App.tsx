@@ -26,6 +26,7 @@ export default function App() {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [mapOverlay, setMapOverlay] = useState<MapOverlay>('risk');
+  const [mapFullscreen, setMapFullscreen] = useState(false);
 
   useEffect(() => {
     if (liveZones.length) {
@@ -155,26 +156,52 @@ export default function App() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-6">
         {activeTab === 'dashboard' && (
-          <div className="grid lg:grid-cols-12 gap-5 items-start">
-            <div className="lg:col-span-7 xl:col-span-8 space-y-3">
+          <div
+            className={
+              mapFullscreen
+                ? ''
+                : 'grid lg:grid-cols-12 gap-5 items-start'
+            }
+          >
+            <div
+              className={
+                mapFullscreen ? '' : 'lg:col-span-7 xl:col-span-8 space-y-3'
+              }
+            >
               <ZoneMap
                 zones={zones}
                 selectedZoneId={selectedZoneId}
                 onSelectZone={handleSelectZone}
                 overlay={mapOverlay}
                 setOverlay={setMapOverlay}
+                fullscreen={mapFullscreen}
+                onToggleFullscreen={() => setMapFullscreen((v) => !v)}
               />
             </div>
 
-            <div className="lg:col-span-5 xl:col-span-4 sticky top-20">
-              <ZoneDetailPanel
-                zone={selectedZone}
-                onClose={() => setSelectedZoneId(null)}
-                onSelectAnotherZone={(id) => setSelectedZoneId(id)}
-                allZones={zones}
-                weatherAsOf={freshness?.weatherAsOf}
-              />
-            </div>
+            {!mapFullscreen && (
+              <div className="lg:col-span-5 xl:col-span-4 sticky top-20">
+                <ZoneDetailPanel
+                  zone={selectedZone}
+                  onClose={() => setSelectedZoneId(null)}
+                  onSelectAnotherZone={(id) => setSelectedZoneId(id)}
+                  allZones={zones}
+                  weatherAsOf={freshness?.weatherAsOf}
+                />
+              </div>
+            )}
+
+            {mapFullscreen && selectedZone && (
+              <div className="fixed top-20 right-3 bottom-16 w-[min(100vw-1.5rem,360px)] z-[210] overflow-y-auto shadow-2xl">
+                <ZoneDetailPanel
+                  zone={selectedZone}
+                  onClose={() => setSelectedZoneId(null)}
+                  onSelectAnotherZone={(id) => setSelectedZoneId(id)}
+                  allZones={zones}
+                  weatherAsOf={freshness?.weatherAsOf}
+                />
+              </div>
+            )}
           </div>
         )}
 
