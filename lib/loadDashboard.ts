@@ -3,10 +3,10 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { calculateRisk, defaultPrecautions } from './riskModel';
-import type { CityConditions, ZoneData } from '../src/types';
-import type { DataFreshness, DashboardPayload } from './buildDashboard';
-import { isDengueDataStale } from './api/dengueCases';
+import { calculateRisk, defaultPrecautions } from './riskModel.js';
+import type { CityConditions, ZoneData } from '../src/types.js';
+import type { DataFreshness, DashboardPayload } from './buildDashboard.js';
+import { isDengueDataStale } from './api/dengueCases.js';
 
 interface ZoneRow {
   id: string;

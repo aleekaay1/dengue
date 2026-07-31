@@ -6,7 +6,7 @@
  * and ~9–11 km grid — still city-scale, but each lat/lng is queried separately.
  */
 
-import { CACHE_TTL, getCached, setCache } from './cache';
+import { CACHE_TTL, getCached, setCache } from './cache.js';
 
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast';
 

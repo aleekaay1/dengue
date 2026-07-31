@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { buildDashboard } from '../../lib/buildDashboard';
-import { persistDashboard } from '../../lib/persistDashboard';
-import { createServiceClient, isSupabaseConfigured } from '../../lib/supabase';
+import { buildDashboard } from '../../lib/buildDashboard.js';
+import { persistDashboard } from '../../lib/persistDashboard.js';
+import { createServiceClient, isSupabaseConfigured } from '../../lib/supabase.js';
+import { sendJson } from '../_http.js';
 
 function authorize(req: VercelRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -10,7 +11,6 @@ function authorize(req: VercelRequest): boolean {
   const headerSecret = req.headers['x-cron-secret'];
   if (auth === `Bearer ${secret}`) return true;
   if (typeof headerSecret === 'string' && headerSecret === secret) return true;
-  // Vercel Cron sends Authorization: Bearer <CRON_SECRET> when configured
   return false;
 }
 
@@ -20,12 +20,12 @@ function authorize(req: VercelRequest): boolean {
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
+    sendJson(res, 405, { error: 'Method not allowed' });
     return;
   }
 
   if (!authorize(req)) {
-    res.status(401).json({ error: 'Unauthorized' });
+    sendJson(res, 401, { error: 'Unauthorized' });
     return;
   }
 
@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
-    res.status(200).json({
+    sendJson(res, 200, {
       ok: true,
       persisted,
       zones: payload.zones.length,
@@ -68,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err) {
     console.error('[cron/refresh]', err);
-    res.status(500).json({
+    sendJson(res, 500, {
       ok: false,
       error: err instanceof Error ? err.message : 'Refresh failed',
     });

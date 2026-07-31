@@ -3,12 +3,12 @@
  * Server-side / cron only — frontend should read persisted Supabase rows.
  */
 
-import { fetchWeatherForZones, type WeatherReading } from './api/weather';
-import { fetchVegetationForZones } from './api/vegetation';
-import { fetchDengueCases, isDengueDataStale } from './api/dengueCases';
-import { calculateRisk, defaultPrecautions } from './riskModel';
-import { ZONE_META } from './zoneMeta';
-import type { CityConditions, ZoneData } from '../src/types';
+import { fetchWeatherForZones, type WeatherReading } from './api/weather.js';
+import { fetchVegetationForZones } from './api/vegetation.js';
+import { fetchDengueCases, isDengueDataStale } from './api/dengueCases.js';
+import { calculateRisk, defaultPrecautions } from './riskModel.js';
+import { ZONE_META } from './zoneMeta.js';
+import type { CityConditions, ZoneData } from '../src/types.js';
 
 export interface DataFreshness {
   weatherAsOf: string | null;

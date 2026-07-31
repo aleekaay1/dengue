@@ -3,8 +3,8 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { DashboardPayload } from './buildDashboard';
-import { ZONE_META } from './zoneMeta';
+import type { DashboardPayload } from './buildDashboard.js';
+import { ZONE_META } from './zoneMeta.js';
 
 export async function ensureZonesSeeded(supabase: SupabaseClient): Promise<void> {
   const rows = ZONE_META.map((z) => ({
