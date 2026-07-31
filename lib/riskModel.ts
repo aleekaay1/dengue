@@ -1,8 +1,10 @@
 /**
  * Transparent, explainable adult mosquito activity risk model (MVP).
  *
- * Pure function — inputs in, score/level/factors out. Can later be swapped
- * for a trained Random Forest / XGBoost model without changing consumers.
+ * Literature-informed heuristic for thesis / operations demo — weights are
+ * design choices grounded in Aedes ecology literature, NOT a statistically
+ * fitted or epidemiologically validated model. Swap later for RF/XGBoost
+ * without changing consumers.
  */
 
 import type { CaseHistory, ContributingFactor, RiskLevel } from '../src/types.js';
@@ -91,6 +93,10 @@ function impactFromContribution(contribution: number): ContributingFactor['impac
   return 'low';
 }
 
+function maxPts(weight: number): number {
+  return Math.round(weight * 100);
+}
+
 /**
  * Calculate mosquito activity risk score from environmental + case inputs.
  */
@@ -127,53 +133,66 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     recentCases: Math.round(c * RISK_WEIGHTS.recentCases * 100),
   };
 
+  const max = {
+    temperature: maxPts(RISK_WEIGHTS.temperature),
+    humidity: maxPts(RISK_WEIGHTS.humidity),
+    vegetation: maxPts(RISK_WEIGHTS.vegetation),
+    rainfall: maxPts(RISK_WEIGHTS.rainfall),
+    recentCases: maxPts(RISK_WEIGHTS.recentCases),
+  };
+
   const lastWeekCases = input.pastCases.at(-1)?.count ?? 0;
+  const inTempPeak = input.temperature >= 26 && input.temperature <= 32;
 
   const contributingFactors: ContributingFactor[] = [
     {
       factor: `Ambient Temperature (${input.temperature.toFixed(1)}°C)`,
       impact: impactFromContribution(contrib.temperature),
-      description:
-        input.temperature >= 26 && input.temperature <= 32
-          ? 'Temperature is inside the 26–32°C window favoring Aedes activity and viral replication.'
-          : 'Temperature is outside the peak Aedes activity band, lowering this component.',
+      description: inTempPeak
+        ? `Inside the 26–32°C Aedes activity window — contributing ${contrib.temperature} of ${max.temperature} possible points (peak near 28.5°C).`
+        : `Outside the peak 26–32°C band — still adds ${contrib.temperature} of ${max.temperature} possible points (below full weight; not a negative penalty).`,
       scoreContribution: contrib.temperature,
+      maxContribution: max.temperature,
     },
     {
       factor: `Relative Humidity (${input.humidity}%)`,
       impact: impactFromContribution(contrib.humidity),
       description:
         input.humidity >= 70
-          ? `Humidity at ${input.humidity}% extends adult Aedes survival and biting activity.`
-          : `Humidity at ${input.humidity}% provides moderate support for adult mosquito survival.`,
+          ? `Humidity at ${input.humidity}% strongly supports adult survival — ${contrib.humidity} of ${max.humidity} possible points.`
+          : `Humidity at ${input.humidity}% provides moderate support — ${contrib.humidity} of ${max.humidity} possible points.`,
       scoreContribution: contrib.humidity,
+      maxContribution: max.humidity,
     },
     {
       factor: `Vegetation / Shade (NDVI ${input.vegetationIndex.toFixed(2)})`,
       impact: impactFromContribution(contrib.vegetation),
       description:
         input.vegetationIndex >= 0.6
-          ? 'Dense canopy shade creates cool, humid daytime resting sites for adult mosquitoes.'
-          : 'Moderate or sparse vegetation provides limited daytime resting habitat.',
+          ? `Dense canopy shade supports daytime resting sites — ${contrib.vegetation} of ${max.vegetation} possible points.`
+          : `Moderate/sparse vegetation — ${contrib.vegetation} of ${max.vegetation} possible points.`,
       scoreContribution: contrib.vegetation,
+      maxContribution: max.vegetation,
     },
     {
       factor: `Recent Rainfall (${input.rainfallRecent.toFixed(1)} mm / ~48h)`,
       impact: impactFromContribution(contrib.rainfall),
       description:
         input.rainfallRecent >= 20
-          ? 'Recent rain increases container breeding opportunity in the following days.'
-          : 'Limited recent rainfall reduces fresh breeding-container recharge.',
+          ? `Recent rain raises breeding-container opportunity — ${contrib.rainfall} of ${max.rainfall} possible points.`
+          : `Limited recent rainfall — ${contrib.rainfall} of ${max.rainfall} possible points.`,
       scoreContribution: contrib.rainfall,
+      maxContribution: max.rainfall,
     },
     {
       factor: `Recent Case History (${lastWeekCases} last week)`,
       impact: impactFromContribution(contrib.recentCases),
       description:
         lastWeekCases >= 15
-          ? 'Elevated recent confirmed/probable cases indicate an active local transmission reservoir.'
-          : 'Recent case counts are relatively contained in this zone.',
+          ? `Elevated recent cases suggest local transmission — ${contrib.recentCases} of ${max.recentCases} possible points.`
+          : `Recent case counts are relatively contained — ${contrib.recentCases} of ${max.recentCases} possible points.`,
       scoreContribution: contrib.recentCases,
+      maxContribution: max.recentCases,
     },
   ]
     .filter((f) => f.scoreContribution > 0)

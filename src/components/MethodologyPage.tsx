@@ -83,48 +83,65 @@ export const MethodologyPage: React.FC = () => {
         </h2>
 
         <p className="text-xs text-[#23241F] leading-relaxed">
-          The Activity Score combines four real-time environmental and epidemiological variables into a single 0-100 index:
+          The Activity Score is a <strong>literature-informed heuristic</strong> (MVP) — weights were chosen from
+          Aedes ecology principles for an explainable demo, <strong>not</strong> from a statistically fitted
+          regression or outbreak validation study. Each input is normalized 0–1, multiplied by its weight, and
+          summed to a 0–100 index.
         </p>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono-data">
-          
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs font-mono-data">
           <div className="bg-white p-3 rounded-xs border-t-3 border-[#D9A441] border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Humidity Factor (35%)
+              Temperature (25%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Relative humidity &gt;65% increases feeding frequency from once every 3 days to every 24 hours.
+              Peaks near 28.5°C (26–32°C window). Outside the band the factor still adds points, but fewer than its max 25.
+            </p>
+          </div>
+
+          <div className="bg-white p-3 rounded-xs border-t-3 border-sky-500 border border-[#DDD3C1]">
+            <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
+              Humidity (25%)
+            </div>
+            <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
+              Adult survival rises above ~60% RH; high humidity can outweigh cooler temperatures in monsoon conditions.
             </p>
           </div>
 
           <div className="bg-white p-3 rounded-xs border-t-3 border-[#4C8C6B] border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Vegetation / Shade (30%)
+              Vegetation / Shade (20%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Satellite NDVI index measures tree canopy cover where adult mosquitoes rest during peak heat hours.
+              Sentinel-2 NDVI approximates canopy resting habitat for daytime adult mosquitoes.
             </p>
           </div>
 
           <div className="bg-white p-3 rounded-xs border-t-3 border-[#B5432A] border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Temperature Window (20%)
+              Case history (20%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Optimal viral incubation occurs between 26°C and 30°C. Extreme cold (&lt;15°C) or heat (&gt;38°C) halts flight.
+              Recent weekly cases as a transmission-reservoir proxy (demo counts until a live ICT feed is wired).
             </p>
           </div>
 
-          <div className="bg-white p-3 rounded-xs border-t-3 border-[#23241F] border border-[#DDD3C1]">
+          <div className="bg-white p-3 rounded-xs border-t-3 border-blue-600 border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Case Reservoir (15%)
+              Rainfall ~48h (10%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Recent human dengue cases in the neighborhood supply the viral reservoir for mosquito-to-human transmission.
+              Recent rain increases container breeding opportunity; capped so extreme storms do not dominate the score.
             </p>
           </div>
-
         </div>
+
+        <p className="text-[11px] text-[#5C5E54] leading-relaxed border border-[#DDD3C1] bg-white p-3 rounded-xs">
+          <strong className="text-[#1F3D2E]">Committee note:</strong> If asked why humidity can outrank case history
+          on a given day — the model is designed so near-saturating RH (weight 25%) can contribute more points than
+          a moderate case series (weight 20%) when environmental conditions are highly favorable. That is an explicit
+          design choice for an adult-biting activity signal, not a claim of causal outbreak forecasting.
+        </p>
       </div>
 
       {/* CORE EXPLAINER 3: ONE HEALTH FRAMEWORK */}
@@ -179,7 +196,7 @@ export const MethodologyPage: React.FC = () => {
           <strong>Surveillance system:</strong> Dengue risk monitoring for Islamabad / ICT Health.
         </div>
         <div>
-          Designed for swap-in with live PMD Weather & Sentinel-2 Satellite APIs.
+          Weather: Open-Meteo · NDVI: Sentinel-2 via Earth Engine · Cases: placeholder until ICT feed.
         </div>
       </div>
 

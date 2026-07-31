@@ -168,13 +168,16 @@ Islamabad / ICT Health Vector Intelligence System`;
                     {factor.factor}
                   </span>
                   <span
-                    className={`font-mono-data text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase ${
-                      factor.scoreContribution > 0
-                        ? 'bg-[#B5432A]/10 text-[#B5432A]'
-                        : 'bg-[#4C8C6B]/10 text-[#4C8C6B]'
-                    }`}
+                    className="font-mono-data text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase bg-[#B5432A]/10 text-[#B5432A]"
+                    title={
+                      factor.maxContribution
+                        ? `Adds ${factor.scoreContribution} of up to ${factor.maxContribution} points for this factor`
+                        : undefined
+                    }
                   >
-                    {factor.scoreContribution > 0 ? `+${factor.scoreContribution} pts` : `${factor.scoreContribution} pts`}
+                    {factor.maxContribution
+                      ? `${factor.scoreContribution}/${factor.maxContribution} pts`
+                      : `+${factor.scoreContribution} pts`}
                   </span>
                 </div>
                 <p className="text-[11px] text-[#5C5E54] leading-normal">{factor.description}</p>

@@ -42,6 +42,17 @@ export default function App() {
     return zones.find((z) => z.id === selectedZoneId) || zones[0] || null;
   }, [zones, selectedZoneId]);
 
+  /** Always derive high-risk tally from the zones on screen (avoids strip/detail mismatch). */
+  const displayConditions = useMemo(() => {
+    if (!cityConditions) return null;
+    const high = zones.filter((z) => z.riskLevel === 'high').length;
+    return {
+      ...cityConditions,
+      activeHighRiskZones: high,
+      totalZonesMonitored: zones.length || cityConditions.totalZonesMonitored,
+    };
+  }, [cityConditions, zones]);
+
   const handleSelectZone = (zone: ZoneData) => {
     setSelectedZoneId(zone.id);
   };
@@ -91,7 +102,7 @@ export default function App() {
     );
   }
 
-  if (!cityConditions) {
+  if (!cityConditions || !displayConditions) {
     return null;
   }
 
@@ -113,8 +124,9 @@ export default function App() {
             )}
             {freshness && !freshness.dengueScrapeOk && (
               <span className="text-[#F0A090]">
-                Dengue cases: seed snapshot
-                {freshness.dengueAsOf ? ` (${freshness.dengueAsOf})` : ''}
+                Dengue cases: demo placeholder counts
+                {freshness.dengueAsOf ? ` (as of ${freshness.dengueAsOf})` : ''}
+                — not a live hospital feed
               </span>
             )}
             {error && <span className="text-[#F0A090]">{error}</span>}
@@ -134,12 +146,12 @@ export default function App() {
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        cityConditions={cityConditions}
+        cityConditions={displayConditions}
         onRefresh={handleRefresh}
         refreshing={loading}
       />
 
-      <ConditionsStrip conditions={cityConditions} freshness={freshness} />
+      <ConditionsStrip conditions={displayConditions} freshness={freshness} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-6">
         {activeTab === 'dashboard' && (
@@ -181,7 +193,7 @@ export default function App() {
         {activeTab === 'admin' && (
           <AdminDataView
             zones={zones}
-            cityConditions={cityConditions}
+            cityConditions={displayConditions}
             onUpdateZone={handleUpdateZone}
             onUpdateCityConditions={(c) => setCityConditions(c)}
             onResetData={handleRefresh}

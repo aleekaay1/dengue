@@ -82,7 +82,8 @@ export const ConditionsStrip: React.FC<ConditionsStripProps> = ({
           <div className="hidden lg:flex items-center gap-2 bg-[#B5432A]/20 border border-[#B5432A]/50 px-3 py-1 rounded-xs">
             <AlertTriangle className="w-4 h-4 text-[#B5432A] shrink-0" />
             <span className="font-heading font-bold text-xs text-white">
-              {conditions.activeHighRiskZones} / {conditions.totalZonesMonitored} HIGH RISK
+              {conditions.activeHighRiskZones} of {conditions.totalZonesMonitored}{' '}
+              zones HIGH RISK
             </span>
           </div>
         </div>

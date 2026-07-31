@@ -9,7 +9,10 @@ export interface ContributingFactor {
   factor: string;
   impact: 'high' | 'medium' | 'low';
   description: string;
+  /** Points this factor currently adds to the 0–100 score */
   scoreContribution: number;
+  /** Maximum points this factor can contribute at full weight */
+  maxContribution?: number;
 }
 
 export interface ZoneData {
