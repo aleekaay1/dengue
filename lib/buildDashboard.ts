@@ -3,12 +3,12 @@
  * Server-side / cron only — frontend should read persisted Supabase rows.
  */
 
-import { fetchWeatherForZones, type WeatherReading } from './api/weather.ts';
-import { fetchVegetationForZones } from './api/vegetation.ts';
-import { fetchDengueCases, isDengueDataStale } from './api/dengueCases.ts';
-import { calculateRisk, defaultPrecautions } from './riskModel.ts';
-import { ZONE_META } from './zoneMeta.ts';
-import type { CityConditions, ZoneData } from '../src/types.ts';
+import { fetchWeatherForZones, type WeatherReading } from './api/weather';
+import { fetchVegetationForZones } from './api/vegetation';
+import { fetchDengueCases, isDengueDataStale } from './api/dengueCases';
+import { calculateRisk, defaultPrecautions } from './riskModel';
+import { ZONE_META } from './zoneMeta';
+import type { CityConditions, ZoneData } from '../src/types';
 
 export interface DataFreshness {
   weatherAsOf: string | null;

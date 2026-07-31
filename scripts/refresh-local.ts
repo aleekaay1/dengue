@@ -7,9 +7,9 @@ import { config } from 'dotenv';
 config({ path: '.env.local' });
 config();
 
-import { buildDashboard } from '../lib/buildDashboard.ts';
-import { persistDashboard } from '../lib/persistDashboard.ts';
-import { createServiceClient, isSupabaseConfigured } from '../lib/supabase.ts';
+import { buildDashboard } from '../lib/buildDashboard';
+import { persistDashboard } from '../lib/persistDashboard';
+import { createServiceClient, isSupabaseConfigured } from '../lib/supabase';
 
 const payload = await buildDashboard({ bypassCache: true });
 

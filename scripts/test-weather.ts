@@ -3,8 +3,8 @@
  * Run: npx tsx scripts/test-weather.ts
  */
 
-import { ZONE_META } from '../lib/zoneMeta.ts';
-import { fetchWeatherForZones } from '../lib/api/weather.ts';
+import { ZONE_META } from '../lib/zoneMeta';
+import { fetchWeatherForZones } from '../lib/api/weather';
 
 const zones = ZONE_META.map((z) => ({
   id: z.id,

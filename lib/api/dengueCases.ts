@@ -12,7 +12,7 @@
  * scraped on every page load.
  */
 
-import { CACHE_TTL, getCached, setCache } from './cache.ts';
+import { CACHE_TTL, getCached, setCache } from './cache';
 
 export interface WeeklyCaseCount {
   week: string;

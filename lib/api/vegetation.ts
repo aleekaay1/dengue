@@ -6,7 +6,7 @@
  * Vegetation changes slowly — refresh weekly when live.
  */
 
-import { CACHE_TTL, getCached, setCache } from './cache.ts';
+import { CACHE_TTL, getCached, setCache } from './cache';
 
 export interface VegetationReading {
   vegetationIndex: number; // NDVI 0–1

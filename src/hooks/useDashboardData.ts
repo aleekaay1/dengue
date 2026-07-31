@@ -47,11 +47,35 @@ async function fetchViaApi(opts?: {
   if (opts?.refresh) params.set('refresh', '1');
   const qs = params.toString();
   const res = await fetch(`/api/dashboard${qs ? `?${qs}` : ''}`);
-  const data = await res.json();
+  const text = await res.text();
+  let data: {
+    error?: string;
+    zones?: ZoneData[];
+    cityConditions?: CityConditions;
+    freshness?: FreshnessInfo;
+    mode?: 'supabase' | 'live-build';
+    builtAt?: string;
+  };
+  try {
+    data = JSON.parse(text) as typeof data;
+  } catch {
+    throw new Error(
+      `Dashboard API returned non-JSON (${res.status}): ${text.slice(0, 120)}`
+    );
+  }
   if (!res.ok) {
     throw new Error(data.error || `Dashboard request failed (${res.status})`);
   }
-  return data;
+  if (!data.zones || !data.cityConditions || !data.freshness || !data.mode || !data.builtAt) {
+    throw new Error('Dashboard API returned an incomplete payload');
+  }
+  return data as {
+    zones: ZoneData[];
+    cityConditions: CityConditions;
+    freshness: FreshnessInfo;
+    mode: 'supabase' | 'live-build';
+    builtAt: string;
+  };
 }
 
 export function useDashboardData(): DashboardState {

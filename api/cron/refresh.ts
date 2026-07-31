@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { buildDashboard } from '../../lib/buildDashboard.ts';
-import { persistDashboard } from '../../lib/persistDashboard.ts';
-import { createServiceClient, isSupabaseConfigured } from '../../lib/supabase.ts';
+import { buildDashboard } from '../../lib/buildDashboard';
+import { persistDashboard } from '../../lib/persistDashboard';
+import { createServiceClient, isSupabaseConfigured } from '../../lib/supabase';
 
 function authorize(req: VercelRequest): boolean {
   const secret = process.env.CRON_SECRET;

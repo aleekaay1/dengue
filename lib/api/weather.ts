@@ -6,7 +6,7 @@
  * and ~9–11 km grid — still city-scale, but each lat/lng is queried separately.
  */
 
-import { CACHE_TTL, getCached, setCache } from './cache.ts';
+import { CACHE_TTL, getCached, setCache } from './cache';
 
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast';
 
@@ -178,17 +178,19 @@ export async function fetchWeatherForZones(
   const readings: Record<string, WeatherReading> = {};
   const errors: Record<string, string> = {};
 
-  // Gentle on free-tier rate limits
-  for (const zone of zones) {
-    try {
-      readings[zone.id] = await fetchWeatherForPoint(zone.lat, zone.lng, {
-        zoneId: zone.id,
-        bypassCache: options?.bypassCache,
-      });
-    } catch (err) {
-      errors[zone.id] = err instanceof Error ? err.message : String(err);
-    }
-  }
+  // Parallel — Open-Meteo allows burst; keeps Vercel under maxDuration
+  await Promise.all(
+    zones.map(async (zone) => {
+      try {
+        readings[zone.id] = await fetchWeatherForPoint(zone.lat, zone.lng, {
+          zoneId: zone.id,
+          bypassCache: options?.bypassCache,
+        });
+      } catch (err) {
+        errors[zone.id] = err instanceof Error ? err.message : String(err);
+      }
+    })
+  );
 
   return { readings, errors };
 }

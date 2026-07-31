@@ -5,7 +5,7 @@
  * for a trained Random Forest / XGBoost model without changing consumers.
  */
 
-import type { CaseHistory, ContributingFactor, RiskLevel } from '../src/types.ts';
+import type { CaseHistory, ContributingFactor, RiskLevel } from '../src/types';
 
 /** Configurable thresholds — do not bury magic numbers in call sites */
 export const RISK_THRESHOLDS = {

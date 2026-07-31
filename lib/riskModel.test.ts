@@ -1,4 +1,4 @@
-import { calculateRisk, RISK_THRESHOLDS, scoreToRiskLevel } from './riskModel.ts';
+import { calculateRisk, RISK_THRESHOLDS, scoreToRiskLevel } from './riskModel';
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);

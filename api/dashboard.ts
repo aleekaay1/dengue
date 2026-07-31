@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { buildDashboard } from '../lib/buildDashboard.ts';
-import { createServiceClient, isSupabaseConfigured } from '../lib/supabase.ts';
-import { loadDashboardFromSupabase } from '../lib/loadDashboard.ts';
+import { buildDashboard } from '../lib/buildDashboard';
+import { createServiceClient, isSupabaseConfigured } from '../lib/supabase';
+import { loadDashboardFromSupabase } from '../lib/loadDashboard';
 import { createClient } from '@supabase/supabase-js';
 
 /**
@@ -10,6 +10,8 @@ import { createClient } from '@supabase/supabase-js';
  * (dev / pre-Supabase verification path).
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Content-Type', 'application/json');
+
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -19,14 +21,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const forceLive = req.query.live === '1';
 
     if (!forceLive && isSupabaseConfigured()) {
-      const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL!;
-      const key =
-        process.env.VITE_SUPABASE_ANON_KEY ||
-        process.env.SUPABASE_SERVICE_ROLE_KEY!;
-      const supabase = createClient(url, key);
-      const payload = await loadDashboardFromSupabase(supabase);
-      res.status(200).json({ ...payload, mode: 'supabase' });
-      return;
+      try {
+        const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL!;
+        const key =
+          process.env.VITE_SUPABASE_ANON_KEY ||
+          process.env.SUPABASE_SERVICE_ROLE_KEY!;
+        const supabase = createClient(url, key);
+        const payload = await loadDashboardFromSupabase(supabase);
+        res.status(200).json({ ...payload, mode: 'supabase' });
+        return;
+      } catch (sbErr) {
+        console.warn(
+          '[api/dashboard] Supabase load failed, falling back to live build',
+          sbErr
+        );
+      }
     }
 
     const payload = await buildDashboard({
