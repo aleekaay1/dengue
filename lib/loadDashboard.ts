@@ -7,6 +7,7 @@ import { calculateRisk, defaultPrecautions } from './riskModel.js';
 import type { CityConditions, ZoneData } from '../src/types.js';
 import type { DataFreshness, DashboardPayload } from './buildDashboard.js';
 import { isDengueDataStale } from './api/dengueCases.js';
+import { loadTerrainDepressionsAsync } from './api/terrain.js';
 import { ZONE_META } from './zoneMeta.js';
 
 const META_BY_ID = new Map(ZONE_META.map((z) => [z.id, z]));
@@ -89,6 +90,9 @@ export async function loadDashboardFromSupabase(
     .order('week_index', { ascending: true });
   if (cErr) throw new Error(`Failed to load dengue_cases: ${cErr.message}`);
 
+  // Rare-refresh structural layer (Supabase table or seed JSON) — not daily weather
+  const terrain = await loadTerrainDepressionsAsync(supabase);
+
   const readingByZone = new Map<string, ReadingRow>();
   for (const r of (readings ?? []) as ReadingRow[]) {
     readingByZone.set(r.zone_id, r);
@@ -135,6 +139,9 @@ export async function loadDashboardFromSupabase(
       count: c.case_count,
     }));
 
+    const terr = terrain.byZone[z.id];
+    const depressionRiskScore = terr?.depressionRiskScore ?? 0;
+
     // Recompute factors from stored inputs so "why this score" stays accurate
     const risk = calculateRisk({
       temperature: reading.temperature,
@@ -142,6 +149,7 @@ export async function loadDashboardFromSupabase(
       vegetationIndex: reading.ndvi,
       rainfallRecent: reading.rainfall,
       pastCases,
+      depressionRiskScore,
       zoneName: z.name,
     });
 
@@ -161,13 +169,18 @@ export async function loadDashboardFromSupabase(
       coordinates: { lat: z.lat, lng: z.lng },
       svgPolygonPath: z.svg_polygon_path,
       svgLabelCoord: { x: z.svg_label_x, y: z.svg_label_y },
-      riskLevel: reading.risk_level,
-      riskScore: reading.risk_score,
+      // Prefer live recompute so terrain weight is reflected even if daily_readings
+      // were persisted before depression was added to the model.
+      riskLevel: risk.riskLevel,
+      riskScore: risk.riskScore,
       temperature: reading.temperature,
       humidity: reading.humidity,
       rainfallRecent: reading.rainfall,
       vegetationIndex: reading.ndvi,
       shadeCoverage: reading.shade_coverage ?? Math.round(reading.ndvi * 100),
+      depressionDepthAvg: terr?.depressionDepthAvg,
+      depressionAreaPct: terr?.depressionAreaPct,
+      depressionRiskScore,
       pastCases,
       trend:
         trend && trend.length

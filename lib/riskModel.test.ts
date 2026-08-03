@@ -13,11 +13,16 @@ const hotHumid = calculateRisk({
     { week: 'W27', count: 18 },
     { week: 'W28', count: 25 },
   ],
+  depressionRiskScore: 50,
 });
 
 assert(hotHumid.riskScore >= RISK_THRESHOLDS.HIGH, 'peak conditions should be high risk');
 assert(hotHumid.riskLevel === 'high', 'level should be high');
 assert(hotHumid.contributingFactors.length > 0, 'should explain factors');
+assert(
+  hotHumid.components.depression > 0,
+  'depression component should be active when score provided'
+);
 
 const coolDry = calculateRisk({
   temperature: 18,
@@ -25,6 +30,7 @@ const coolDry = calculateRisk({
   vegetationIndex: 0.2,
   rainfallRecent: 0,
   pastCases: [{ week: 'W28', count: 0 }],
+  depressionRiskScore: 0,
 });
 
 assert(coolDry.riskScore < RISK_THRESHOLDS.MEDIUM, 'cool dry should be low/medium');
@@ -32,6 +38,34 @@ assert(scoreToRiskLevel(75) === 'high', '75 => high');
 assert(scoreToRiskLevel(50) === 'medium', '50 => medium');
 assert(scoreToRiskLevel(20) === 'low', '20 => low');
 
+const withTerrain = calculateRisk({
+  temperature: 28.5,
+  humidity: 70,
+  vegetationIndex: 0.5,
+  rainfallRecent: 10,
+  pastCases: [{ week: 'W28', count: 5 }],
+  depressionRiskScore: 72,
+});
+const withoutTerrain = calculateRisk({
+  temperature: 28.5,
+  humidity: 70,
+  vegetationIndex: 0.5,
+  rainfallRecent: 10,
+  pastCases: [{ week: 'W28', count: 5 }],
+  depressionRiskScore: 0,
+});
+assert(
+  withTerrain.riskScore > withoutTerrain.riskScore,
+  'higher depression score should raise composite risk'
+);
+assert(
+  withTerrain.contributingFactors.some((f) =>
+    f.factor.toLowerCase().includes('terrain')
+  ),
+  'why-this-score should mention terrain / standing water'
+);
+
 console.log('riskModel tests passed');
 console.log('  peak score:', hotHumid.riskScore, hotHumid.riskLevel);
 console.log('  cool score:', coolDry.riskScore, coolDry.riskLevel);
+console.log('  terrain delta:', withoutTerrain.riskScore, '→', withTerrain.riskScore);

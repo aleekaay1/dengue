@@ -35,6 +35,11 @@ export interface ZoneData {
   rainfallRecent: number; // mm in last 48 hours
   vegetationIndex: number; // 0.0 - 1.0 (NDVI score)
   shadeCoverage: number; // % estimated canopy/shade cover
+  /** Structural DEM depression metrics (rare refresh — not daily weather) */
+  depressionDepthAvg?: number;
+  depressionAreaPct?: number;
+  /** 0–100 standing-water / terrain sink risk */
+  depressionRiskScore?: number;
   pastCases: CaseHistory[];
   trend: number[]; // Last 7 days risk score history
   lastUpdated: string;
@@ -71,7 +76,7 @@ export interface DataFreshnessState {
 
 export type ActiveTab = 'dashboard' | 'overview' | 'methodology' | 'admin';
 
-export type MapOverlay = 'risk' | 'vegetation' | 'cases';
+export type MapOverlay = 'risk' | 'vegetation' | 'cases' | 'terrain';
 
 export interface FilterState {
   riskLevel: 'all' | RiskLevel;

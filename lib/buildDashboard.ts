@@ -6,6 +6,7 @@
 import { fetchWeatherForZones, type WeatherReading } from './api/weather.js';
 import { fetchVegetationForZones } from './api/vegetation.js';
 import { fetchDengueCases, isDengueDataStale } from './api/dengueCases.js';
+import { loadTerrainDepressions } from './api/terrain.js';
 import { calculateRisk, defaultPrecautions } from './riskModel.js';
 import { ZONE_META } from './zoneMeta.js';
 import type { CityConditions, ZoneData } from '../src/types.js';
@@ -62,6 +63,9 @@ export async function buildDashboard(options?: {
     fetchDengueCases({ bypassCache: options?.bypassCache }),
   ]);
 
+  // Structural DEM depressions — rare batch seed, NOT fetched with daily weather/NDVI
+  const terrain = loadTerrainDepressions();
+
   const zones: ZoneData[] = [];
   const weatherDates: string[] = [];
   let anyWeatherLagged = false;
@@ -70,6 +74,7 @@ export async function buildDashboard(options?: {
     const w: WeatherReading | undefined = weather.readings[meta.id];
     const v = vegetation.readings[meta.id];
     const cases = dengue.byZone[meta.id];
+    const terr = terrain.byZone[meta.id];
 
     if (!w || !v || !cases) {
       // Skip incomplete zones rather than crash — surfaced via freshness.errors
@@ -79,12 +84,15 @@ export async function buildDashboard(options?: {
     weatherDates.push(w.asOfDate);
     if (w.isLagged) anyWeatherLagged = true;
 
+    const depressionRiskScore = terr?.depressionRiskScore ?? 0;
+
     const risk = calculateRisk({
       temperature: w.temperature,
       humidity: w.humidity,
       vegetationIndex: v.vegetationIndex,
       rainfallRecent: w.rainfallRecent,
       pastCases: cases.pastCases,
+      depressionRiskScore,
       zoneName: meta.name,
     });
 
@@ -108,6 +116,9 @@ export async function buildDashboard(options?: {
       rainfallRecent: w.rainfallRecent,
       vegetationIndex: v.vegetationIndex,
       shadeCoverage: v.shadeCoverage,
+      depressionDepthAvg: terr?.depressionDepthAvg,
+      depressionAreaPct: terr?.depressionAreaPct,
+      depressionRiskScore,
       pastCases: cases.pastCases,
       // Placeholder trend until we accumulate daily_readings history
       trend: [

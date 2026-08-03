@@ -39,6 +39,9 @@ function overlayIntensity(zone: ZoneData, overlay: MapOverlay): number {
     const recent = zone.pastCases[zone.pastCases.length - 1]?.count ?? 0;
     return Math.min(1, Math.max(0.05, recent / 30));
   }
+  if (overlay === 'terrain') {
+    return Math.min(1, Math.max(0.05, (zone.depressionRiskScore ?? 0) / 100));
+  }
   return Math.min(1, Math.max(0.08, zone.riskScore / 100));
 }
 
@@ -96,6 +99,13 @@ const CASES_GRADIENT: Record<string, string> = {
   0.45: '#fb923c',
   0.7: '#dc2626',
   1.0: '#7f1d1d',
+};
+
+const TERRAIN_GRADIENT: Record<string, string> = {
+  0.15: '#e0f2fe',
+  0.4: '#38bdf8',
+  0.65: '#0284c7',
+  1.0: '#0c4a6e',
 };
 
 function riskMarkerColor(level: ZoneData['riskLevel']): string {
@@ -200,7 +210,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         ? VEG_GRADIENT
         : overlay === 'cases'
           ? CASES_GRADIENT
-          : HEAT_GRADIENT;
+          : overlay === 'terrain'
+            ? TERRAIN_GRADIENT
+            : HEAT_GRADIENT;
 
     const layer = L.heatLayer(heatPoints, {
       radius: 28,
@@ -308,6 +320,7 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
                 ['risk', 'Risk', 'bg-[#D9A441] text-[#23241F]'],
                 ['vegetation', 'Canopy', 'bg-[#4C8C6B] text-white'],
                 ['cases', 'Cases', 'bg-[#B5432A] text-white'],
+                ['terrain', 'Terrain', 'bg-sky-700 text-white'],
               ] as const
             ).map(([key, label, activeClass]) => (
               <button
@@ -413,7 +426,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
                 ? 'Risk intensity'
                 : overlay === 'vegetation'
                   ? 'Canopy (NDVI)'
-                  : 'Weekly cases'}
+                  : overlay === 'terrain'
+                    ? 'Terrain (standing water)'
+                    : 'Weekly cases'}
             </span>
             <Layers className="w-3 h-3 text-[#D9A441]" />
           </div>
@@ -423,7 +438,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
                 ? 'from-lime-200 via-green-500 to-green-950'
                 : overlay === 'cases'
                   ? 'from-amber-200 via-orange-500 to-red-900'
-                  : 'from-blue-600 via-yellow-400 to-red-600'
+                  : overlay === 'terrain'
+                    ? 'from-sky-100 via-sky-500 to-sky-950'
+                    : 'from-blue-600 via-yellow-400 to-red-600'
             }`}
           />
           <div className="flex justify-between font-mono-data text-[10px] text-[#EDE6D6]/70">
@@ -463,6 +480,10 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
               <div>
                 <span className="text-[#EDE6D6]/50">Rain </span>
                 {hoveredZone.rainfallRecent}mm
+              </div>
+              <div className="col-span-2">
+                <span className="text-[#EDE6D6]/50">Terrain </span>
+                {hoveredZone.depressionRiskScore ?? 0}/100
               </div>
             </div>
           </div>

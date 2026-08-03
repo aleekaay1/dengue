@@ -12,6 +12,7 @@ import {
   Droplets,
   Trees,
   CloudRain,
+  Waves,
   MapPin,
   Calendar,
   Layers,
@@ -131,7 +132,7 @@ Islamabad / ICT Health Vector Intelligence System`;
       <div className="p-4 overflow-y-auto space-y-4 text-xs font-sans">
         
         {/* Metric Quick Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono-data">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono-data">
           <div className="bg-[#EDE6D6] p-2 rounded-xs border border-[#DDD3C1]">
             <div className="text-[10px] text-[#5C5E54] flex items-center gap-1">
               <Thermometer className="w-3 h-3 text-[#D9A441]" /> Temp
@@ -158,6 +159,27 @@ Islamabad / ICT Health Vector Intelligence System`;
               <CloudRain className="w-3 h-3 text-blue-600" /> 48h Rain
             </div>
             <div className="text-sm font-bold text-[#23241F] mt-0.5">{zone.rainfallRecent} mm</div>
+          </div>
+
+          <div className="bg-[#EDE6D6] p-2 rounded-xs border border-[#DDD3C1] sm:col-span-2">
+            <div className="text-[10px] text-[#5C5E54] flex items-center gap-1">
+              <Waves className="w-3 h-3 text-sky-800" /> Terrain / Standing Water Risk
+            </div>
+            <div className="text-sm font-bold text-[#23241F] mt-0.5">
+              {zone.depressionRiskScore ?? 0}
+              <span className="text-[10px] font-normal text-[#5C5E54]"> / 100</span>
+              {zone.depressionAreaPct != null && (
+                <span className="ml-2 text-[10px] font-normal text-[#5C5E54]">
+                  · {zone.depressionAreaPct}% sink area
+                  {zone.depressionDepthAvg != null
+                    ? ` · ${zone.depressionDepthAvg} m avg depth`
+                    : ''}
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] font-sans text-[#5C5E54] mt-1 leading-snug">
+              Structural DEM factor — natural low points that trap rainwater, independent of today&apos;s weather.
+            </p>
           </div>
         </div>
 

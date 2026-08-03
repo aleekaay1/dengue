@@ -15,6 +15,7 @@
     "lint": "tsc --noEmit",
     "test:weather": "tsx scripts/test-weather.ts",
     "test:risk": "tsx lib/riskModel.test.ts",
+    "terrain": "tsx scripts/compute-terrain.ts && node scripts/export-terrain-seed.mjs",
     "refresh": "tsx scripts/refresh-local.ts"
   },
   "dependencies": {

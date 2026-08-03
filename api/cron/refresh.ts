@@ -17,6 +17,9 @@ function authorize(req: VercelRequest): boolean {
 /**
  * GET/POST /api/cron/refresh
  * Daily job: pull weather + vegetation + dengue → score → Supabase.
+ *
+ * Terrain / standing-water (DEM depressions) is NOT recomputed here — that is a
+ * rare offline batch (npm run terrain). buildDashboard only reads the committed seed.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {

@@ -5,6 +5,9 @@
  * design choices grounded in Aedes ecology literature, NOT a statistically
  * fitted or epidemiologically validated model. Swap later for RF/XGBoost
  * without changing consumers.
+ *
+ * Depression / standing-water is a STRUCTURAL factor (terrain sinks), not a
+ * daily weather reading — same transparent weighted sum as the other inputs.
  */
 
 import type { CaseHistory, ContributingFactor, RiskLevel } from '../src/types.js';
@@ -15,13 +18,19 @@ export const RISK_THRESHOLDS = {
   MEDIUM: 40,
 } as const;
 
-/** Weights must sum to 1.0 for a 0–100 composite after normalization */
+/**
+ * Weights must sum to 1.0 for a 0–100 composite after normalization.
+ * Existing weather/NDVI/case factors keep the same relative balance; room was
+ * made for a ~10% structural terrain term (standing-water / depression risk).
+ */
 export const RISK_WEIGHTS = {
-  temperature: 0.25,
-  humidity: 0.25,
-  vegetation: 0.2,
-  rainfall: 0.1,
-  recentCases: 0.2,
+  temperature: 0.22,
+  humidity: 0.22,
+  vegetation: 0.18,
+  rainfall: 0.09,
+  recentCases: 0.18,
+  /** Structural — natural depressions that trap rainwater after rain */
+  depression: 0.11,
 } as const;
 
 export interface RiskModelInput {
@@ -30,6 +39,8 @@ export interface RiskModelInput {
   vegetationIndex: number; // NDVI 0–1
   rainfallRecent: number; // mm ~48h
   pastCases: CaseHistory[];
+  /** 0–100 structural depression score (optional; defaults to 0) */
+  depressionRiskScore?: number;
   zoneName?: string;
 }
 
@@ -43,6 +54,7 @@ export interface RiskModelOutput {
     vegetation: number;
     rainfall: number;
     recentCases: number;
+    depression: number;
   };
 }
 
@@ -81,6 +93,11 @@ function normalizeRecentCases(pastCases: CaseHistory[]): number {
   return clamp(recent / 40, 0, 1);
 }
 
+function normalizeDepression(score: number | undefined): number {
+  if (score == null || Number.isNaN(score)) return 0;
+  return clamp(score / 100, 0, 1);
+}
+
 export function scoreToRiskLevel(score: number): RiskLevel {
   if (score >= RISK_THRESHOLDS.HIGH) return 'high';
   if (score >= RISK_THRESHOLDS.MEDIUM) return 'medium';
@@ -98,7 +115,7 @@ function maxPts(weight: number): number {
 }
 
 /**
- * Calculate mosquito activity risk score from environmental + case inputs.
+ * Calculate mosquito activity risk score from environmental + case + terrain inputs.
  */
 export function calculateRisk(input: RiskModelInput): RiskModelOutput {
   const t = normalizeTemperature(input.temperature);
@@ -106,6 +123,7 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
   const v = normalizeVegetation(input.vegetationIndex);
   const r = normalizeRainfall(input.rainfallRecent);
   const c = normalizeRecentCases(input.pastCases);
+  const d = normalizeDepression(input.depressionRiskScore);
 
   const components = {
     temperature: t,
@@ -113,6 +131,7 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     vegetation: v,
     rainfall: r,
     recentCases: c,
+    depression: d,
   };
 
   const raw =
@@ -120,7 +139,8 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     h * RISK_WEIGHTS.humidity +
     v * RISK_WEIGHTS.vegetation +
     r * RISK_WEIGHTS.rainfall +
-    c * RISK_WEIGHTS.recentCases;
+    c * RISK_WEIGHTS.recentCases +
+    d * RISK_WEIGHTS.depression;
 
   const riskScore = Math.round(clamp(raw * 100, 0, 100));
   const riskLevel = scoreToRiskLevel(riskScore);
@@ -131,6 +151,7 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     vegetation: Math.round(v * RISK_WEIGHTS.vegetation * 100),
     rainfall: Math.round(r * RISK_WEIGHTS.rainfall * 100),
     recentCases: Math.round(c * RISK_WEIGHTS.recentCases * 100),
+    depression: Math.round(d * RISK_WEIGHTS.depression * 100),
   };
 
   const max = {
@@ -139,10 +160,12 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     vegetation: maxPts(RISK_WEIGHTS.vegetation),
     rainfall: maxPts(RISK_WEIGHTS.rainfall),
     recentCases: maxPts(RISK_WEIGHTS.recentCases),
+    depression: maxPts(RISK_WEIGHTS.depression),
   };
 
   const lastWeekCases = input.pastCases.at(-1)?.count ?? 0;
   const inTempPeak = input.temperature >= 26 && input.temperature <= 32;
+  const depScore = Math.round(clamp(input.depressionRiskScore ?? 0, 0, 100));
 
   const contributingFactors: ContributingFactor[] = [
     {
@@ -194,10 +217,20 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
       scoreContribution: contrib.recentCases,
       maxContribution: max.recentCases,
     },
+    {
+      factor: `Terrain / Standing Water Risk (${depScore}/100)`,
+      impact: impactFromContribution(contrib.depression),
+      description:
+        depScore >= 40
+          ? `This area has natural low-lying terrain that traps rainwater (depression score: ${depScore}/100) — a structural risk factor independent of today's weather. Adds ${contrib.depression} of ${max.depression} possible points.`
+          : `Limited natural depression / sink area (depression score: ${depScore}/100) — structural terrain factor, not today's weather. Adds ${contrib.depression} of ${max.depression} possible points.`,
+      scoreContribution: contrib.depression,
+      maxContribution: max.depression,
+    },
   ]
     .filter((f) => f.scoreContribution > 0)
     .sort((a, b) => b.scoreContribution - a.scoreContribution)
-    .slice(0, 3);
+    .slice(0, 4);
 
   return {
     riskScore,

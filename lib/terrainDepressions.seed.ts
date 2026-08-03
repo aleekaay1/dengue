@@ -1,0 +1,249 @@
+/**
+ * Auto-generated from data/terrain_depressions.json — do not edit by hand.
+ * Regenerate: npm run terrain && node scripts/export-terrain-seed.mjs
+ *
+ * Bundled so Vercel serverless can load terrain without a filesystem GeoTIFF.
+ * This is a RARE-REFRESH structural layer (not daily weather/NDVI).
+ */
+export const TERRAIN_DEPRESSIONS_SEED = {
+  "note": "Structural terrain depression metrics. Refresh quarterly or after major earthworks — not daily.",
+  "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+  "computedAt": "2026-08-03T19:36:39.461Z",
+  "depthThresholdM": 0.25,
+  "zones": [
+    {
+      "zoneId": "zone-f6",
+      "zoneName": "F-6 & Super Market",
+      "depressionDepthAvg": 0.008,
+      "depressionAreaPct": 0.8,
+      "depressionRiskScore": 3,
+      "elevMin": 568,
+      "elevMax": 626,
+      "elevMean": 591.3,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:33:15.256Z"
+    },
+    {
+      "zoneId": "zone-f7",
+      "zoneName": "F-7 Markaz & Jinnah Super",
+      "depressionDepthAvg": 0.05,
+      "depressionAreaPct": 3.3,
+      "depressionRiskScore": 14,
+      "elevMin": 557,
+      "elevMax": 597,
+      "elevMean": 575.9,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:33:20.581Z"
+    },
+    {
+      "zoneId": "zone-bluearea",
+      "zoneName": "Blue Area (Jinnah Avenue)",
+      "depressionDepthAvg": 0.107,
+      "depressionAreaPct": 6.6,
+      "depressionRiskScore": 30,
+      "elevMin": 548,
+      "elevMax": 581,
+      "elevMean": 564.4,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:33:25.914Z"
+    },
+    {
+      "zoneId": "zone-f8",
+      "zoneName": "F-8 & Nazim-ud-Din Road",
+      "depressionDepthAvg": 0.041,
+      "depressionAreaPct": 2.5,
+      "depressionRiskScore": 11,
+      "elevMin": 548,
+      "elevMax": 582,
+      "elevMean": 564.9,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:33:31.236Z"
+    },
+    {
+      "zoneId": "zone-g6",
+      "zoneName": "G-6 & Melody Market",
+      "depressionDepthAvg": 0.182,
+      "depressionAreaPct": 6.6,
+      "depressionRiskScore": 39,
+      "elevMin": 532,
+      "elevMax": 570,
+      "elevMean": 549,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:33:36.564Z"
+    },
+    {
+      "zoneId": "zone-diplomatic",
+      "zoneName": "Diplomatic Enclave & Red Zone",
+      "depressionDepthAvg": 0.074,
+      "depressionAreaPct": 4.1,
+      "depressionRiskScore": 19,
+      "elevMin": 553,
+      "elevMax": 602,
+      "elevMean": 569.6,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:34:28.086Z"
+    },
+    {
+      "zoneId": "zone-g9",
+      "zoneName": "G-9 Markaz",
+      "depressionDepthAvg": 0.24,
+      "depressionAreaPct": 7.4,
+      "depressionRiskScore": 48,
+      "elevMin": 525,
+      "elevMax": 555,
+      "elevMean": 542.5,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:34:33.416Z"
+    },
+    {
+      "zoneId": "zone-f10",
+      "zoneName": "F-10 & F-11",
+      "depressionDepthAvg": 0.231,
+      "depressionAreaPct": 9.1,
+      "depressionRiskScore": 51,
+      "elevMin": 537,
+      "elevMax": 569,
+      "elevMean": 554.4,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:34:38.752Z"
+    },
+    {
+      "zoneId": "zone-g11",
+      "zoneName": "G-11 & G-13",
+      "depressionDepthAvg": 0.05,
+      "depressionAreaPct": 2.5,
+      "depressionRiskScore": 12,
+      "elevMin": 544,
+      "elevMax": 584,
+      "elevMean": 567.7,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:34:44.070Z"
+    },
+    {
+      "zoneId": "zone-i8",
+      "zoneName": "I-8 & I-9 Industrial",
+      "depressionDepthAvg": 0.207,
+      "depressionAreaPct": 9.9,
+      "depressionRiskScore": 50,
+      "elevMin": 502,
+      "elevMax": 522,
+      "elevMean": 514,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:34:49.384Z"
+    },
+    {
+      "zoneId": "zone-bharakahu",
+      "zoneName": "Bharakahu Bazaar",
+      "depressionDepthAvg": 0.215,
+      "depressionAreaPct": 7.4,
+      "depressionRiskScore": 45,
+      "elevMin": 558,
+      "elevMax": 654,
+      "elevMean": 588.8,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:35:10.345Z"
+    },
+    {
+      "zoneId": "zone-banigala",
+      "zoneName": "Banigala / Simly Road",
+      "depressionDepthAvg": 0.165,
+      "depressionAreaPct": 5.8,
+      "depressionRiskScore": 35,
+      "elevMin": 591,
+      "elevMax": 722,
+      "elevMean": 628,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:35:15.675Z"
+    },
+    {
+      "zoneId": "zone-nilore",
+      "zoneName": "Nilore",
+      "depressionDepthAvg": 0.347,
+      "depressionAreaPct": 15.7,
+      "depressionRiskScore": 82,
+      "elevMin": 489,
+      "elevMax": 513,
+      "elevMean": 498.9,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:35:20.984Z"
+    },
+    {
+      "zoneId": "zone-chirah",
+      "zoneName": "Chirah",
+      "depressionDepthAvg": 0.182,
+      "depressionAreaPct": 7.4,
+      "depressionRiskScore": 41,
+      "elevMin": 500,
+      "elevMax": 553,
+      "elevMean": 529,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:35:26.305Z"
+    },
+    {
+      "zoneId": "zone-tarnol",
+      "zoneName": "Tarnol",
+      "depressionDepthAvg": 0.083,
+      "depressionAreaPct": 3.3,
+      "depressionRiskScore": 18,
+      "elevMin": 570,
+      "elevMax": 609,
+      "elevMean": 591.4,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:35:31.895Z"
+    },
+    {
+      "zoneId": "zone-golra",
+      "zoneName": "Golra Sharif",
+      "depressionDepthAvg": 0.091,
+      "depressionAreaPct": 5,
+      "depressionRiskScore": 24,
+      "elevMin": 561,
+      "elevMax": 600,
+      "elevMean": 580,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:36:23.434Z"
+    },
+    {
+      "zoneId": "zone-sihala",
+      "zoneName": "Sihala",
+      "depressionDepthAvg": 0.132,
+      "depressionAreaPct": 7.4,
+      "depressionRiskScore": 35,
+      "elevMin": 455,
+      "elevMax": 483,
+      "elevMean": 465.9,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:36:28.760Z"
+    },
+    {
+      "zoneId": "zone-rawat",
+      "zoneName": "Rawat",
+      "depressionDepthAvg": 0.041,
+      "depressionAreaPct": 1.7,
+      "depressionRiskScore": 9,
+      "elevMin": 550,
+      "elevMax": 585,
+      "elevMean": 567.6,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:36:34.065Z"
+    },
+    {
+      "zoneId": "zone-koral",
+      "zoneName": "Koral",
+      "depressionDepthAvg": 0.43,
+      "depressionAreaPct": 9.9,
+      "depressionRiskScore": 77,
+      "elevMin": 426,
+      "elevMax": 499,
+      "elevMean": 458.7,
+      "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
+      "computedAt": "2026-08-03T19:36:39.460Z"
+    }
+  ],
+  "scoreCalibration": {
+    "depthFullM": 0.45,
+    "areaFullPct": 18,
+    "weightDepth": 0.55,
+    "weightArea": 0.45
+  }
+} as const;
