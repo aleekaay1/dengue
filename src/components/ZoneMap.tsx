@@ -68,11 +68,21 @@ function riskMarkerColor(level: ZoneData['riskLevel']): string {
   return '#4C8C6B';
 }
 
+function hash01(seed: string, salt: number): number {
+  let h = salt * 374761393;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 1103515245);
+  }
+  return ((h >>> 0) % 10000) / 10000;
+}
+
+/** Visible zone heat when block grid file is unavailable */
 function zoneFallbackHeat(
   zones: ZoneData[],
   overlay: MapOverlay
 ): [number, number, number][] {
-  return zones.map((zone) => {
+  const points: [number, number, number][] = [];
+  for (const zone of zones) {
     let intensity = zone.riskScore / 100;
     if (overlay === 'vegetation') intensity = zone.vegetationIndex;
     else if (overlay === 'terrain')
@@ -81,12 +91,24 @@ function zoneFallbackHeat(
       const recent = zone.pastCases[zone.pastCases.length - 1]?.count ?? 0;
       intensity = recent / 30;
     }
-    return [
-      zone.coordinates.lat,
-      zone.coordinates.lng,
-      Math.min(1, Math.max(0.08, intensity)),
-    ];
-  });
+    intensity = Math.min(1, Math.max(0.2, intensity));
+    const { lat, lng } = zone.coordinates;
+    const ruralScale = zone.areaType === 'rural' ? 1.35 : 1;
+    points.push([lat, lng, intensity]);
+    for (let r = 1; r <= 4; r++) {
+      const spokes = 8 + r * 2;
+      const radiusDeg = 0.007 * r * ruralScale;
+      for (let s = 0; s < spokes; s++) {
+        const angle = (s / spokes) * Math.PI * 2 + hash01(zone.id, r) * 0.3;
+        points.push([
+          lat + Math.cos(angle) * radiusDeg * 0.75,
+          lng + Math.sin(angle) * radiusDeg,
+          intensity * (1 - r / 5.5),
+        ]);
+      }
+    }
+  }
+  return points;
 }
 
 export const ZoneMap: React.FC<ZoneMapProps> = ({
@@ -141,46 +163,95 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     return TEHSILS.filter((t) => present.has(t));
   }, [zones]);
 
-  // Load real grid heat points (actual cell centers — no synthetic rings)
+  // Static /grid_heat.json ships with the client (Vercel-safe). API is for zoomed cells.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch('/api/grid');
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          cellSizeM?: number;
-          cellCount?: number;
-          computedAt?: string | null;
-          pilot?: boolean;
-          points?: [number, number, number][];
-        };
-        if (cancelled) return;
-        setCellSizeM(data.cellSizeM ?? 50);
-        setGridMeta({
-          count: data.cellCount ?? data.points?.length ?? 0,
-          computedAt: data.computedAt ?? null,
-          pilot: Boolean(data.pilot),
-        });
-        if (data.points?.length) {
-          setGridPoints(data.points);
+        let points: [number, number, number][] | null = null;
+        let meta = { count: 0, computedAt: null as string | null, pilot: false };
+        let size = 50;
+
+        const staticRes = await fetch('/grid_heat.json');
+        if (staticRes.ok) {
+          const data = (await staticRes.json()) as {
+            cellSizeM?: number;
+            computedAt?: string | null;
+            count?: number;
+            points?: [number, number, number][];
+          };
+          if (data.points?.length) {
+            points = data.points;
+            size = data.cellSizeM ?? 50;
+            meta = {
+              count: data.count ?? data.points.length,
+              computedAt: data.computedAt ?? null,
+              pilot: false,
+            };
+          }
         }
-        // Also pull full cell geometries for high-zoom rectangles (pilot fits in memory)
-        const bboxRes = await fetch(
-          '/api/grid?bbox=72.85,33.45,73.28,33.80&limit=20000'
-        );
-        if (bboxRes.ok) {
-          const body = (await bboxRes.json()) as { cells?: GridCellDto[] };
-          if (!cancelled && body.cells?.length) setAllGridCells(body.cells);
+
+        if (!points?.length) {
+          const api = await fetch('/api/grid?heat=1');
+          if (api.ok) {
+            const data = (await api.json()) as {
+              cellSizeM?: number;
+              computedAt?: string | null;
+              count?: number;
+              points?: [number, number, number][];
+            };
+            if (data.points?.length) {
+              points = data.points;
+              size = data.cellSizeM ?? 50;
+              meta = {
+                count: data.count ?? data.points.length,
+                computedAt: data.computedAt ?? null,
+                pilot: false,
+              };
+            }
+          }
         }
+
+        if (cancelled || !points?.length) return;
+        setCellSizeM(size);
+        setGridMeta(meta);
+        setGridPoints(points);
       } catch {
-        /* zone fallback heat */
+        /* zoneFallbackHeat */
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Load cell rectangles for the current view when zoomed in
+  useEffect(() => {
+    if (zoom < CELL_RECT_ZOOM || mapGrain !== 'blocks') return;
+    const map = mapRef.current;
+    if (!map) return;
+    let cancelled = false;
+    const b = map.getBounds();
+    const bbox = [
+      b.getWest(),
+      b.getSouth(),
+      b.getEast(),
+      b.getNorth(),
+    ].join(',');
+    void (async () => {
+      try {
+        const res = await fetch(`/api/grid?bbox=${bbox}&limit=6000`);
+        if (!res.ok) return;
+        const body = (await res.json()) as { cells?: GridCellDto[] };
+        if (!cancelled && body.cells?.length) setAllGridCells(body.cells);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [zoom, mapGrain]);
 
   const heatPoints = useMemo(() => {
     if (mapGrain === 'zones' || !gridPoints?.length) {
@@ -362,18 +433,18 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
             ? TERRAIN_GRADIENT
             : HEAT_GRADIENT;
 
-    // Radius in px ≈ half a 50m cell at current zoom — heat follows real density
-    const metersPerPx =
-      (40075016.686 * Math.cos((ISLAMABAD_CENTER[0] * Math.PI) / 180)) /
-      Math.pow(2, map.getZoom() + 8);
-    const radiusPx = Math.max(6, Math.min(28, (cellSizeM / 2) / metersPerPx));
+    // City overview needs a larger radius so 50m cells read as a continuous surface
+    const z = map.getZoom();
+    const radiusPx =
+      z >= 16 ? 10 : z >= 14 ? 14 : z >= 12 ? 22 : 28;
+    const blurPx = z >= 14 ? 10 : 18;
 
     const layer = L.heatLayer(heatPoints, {
       radius: radiusPx,
-      blur: Math.max(4, radiusPx * 0.55),
-      maxZoom: 19,
+      blur: blurPx,
+      maxZoom: 18,
       max: 1,
-      minOpacity: 0.4,
+      minOpacity: 0.45,
       gradient,
     });
     layer.addTo(map);
@@ -381,9 +452,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
 
     const el = (layer as unknown as { _canvas?: HTMLCanvasElement })._canvas;
     if (el) {
-      el.style.opacity = map.getZoom() >= CELL_RECT_ZOOM ? '0.15' : '0.9';
+      el.style.opacity = z >= CELL_RECT_ZOOM && mapGrain === 'blocks' ? '0.35' : '1';
     }
-  }, [heatPoints, overlay, mapGrain, cellSizeM, gridPoints?.length]);
+  }, [heatPoints, overlay, mapGrain, cellSizeM, gridPoints?.length, zoom]);
 
   useEffect(() => {
     const group = markersRef.current;

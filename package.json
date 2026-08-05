@@ -18,6 +18,8 @@
     "terrain": "tsx scripts/compute-terrain.ts && node scripts/export-terrain-seed.mjs",
     "grid:fast": "tsx scripts/compute-grid-fast.ts",
     "grid:fast:full": "tsx scripts/compute-grid-fast.ts --full",
+    "grid:pack": "node scripts/pack-grid.mjs && node scripts/publish-heat.mjs",
+    "grid:ingest-ee": "node scripts/ingest-ee-layers.mjs",
     "grid:pilot": "tsx scripts/compute-grid.ts --pilot",
     "grid:full": "tsx scripts/compute-grid.ts --full",
     "refresh": "tsx scripts/refresh-local.ts"

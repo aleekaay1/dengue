@@ -8,7 +8,7 @@
     { "source": "/api/cron/refresh", "destination": "/api/cron/refresh" },
     { "source": "/api/ssr", "destination": "/api/ssr" },
     {
-      "source": "/((?!assets/).*)",
+      "source": "/((?!assets/|grid_heat\\.json|favicon\\.ico|.*\\.png$).*)",
       "destination": "/api/ssr"
     }
   ],

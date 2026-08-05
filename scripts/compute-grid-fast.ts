@@ -9,7 +9,7 @@
  * For S2 COG + OSM footprint density: npm run grid:pilot (slow, overnight).
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -25,7 +25,7 @@ import { ZONE_META } from '../lib/zoneMeta.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA = join(__dirname, '..', 'data');
 
-const ZONE_NDVI: Record<string, number> = {
+const DEFAULT_ZONE_NDVI: Record<string, number> = {
   'zone-f6': 0.36,
   'zone-f7': 0.36,
   'zone-bluearea': 0.34,
@@ -46,6 +46,22 @@ const ZONE_NDVI: Record<string, number> = {
   'zone-rawat': 0.26,
   'zone-koral': 0.3,
 };
+
+function loadEeOverrides(): {
+  ndvi: Record<string, number>;
+  lst: Record<string, number>;
+} {
+  try {
+    const p = join(__dirname, '..', 'data', 'ee_zone_ndvi_lst.json');
+    const j = JSON.parse(readFileSync(p, 'utf8')) as {
+      ndvi?: Record<string, number>;
+      lst?: Record<string, number>;
+    };
+    return { ndvi: j.ndvi ?? {}, lst: j.lst ?? {} };
+  } catch {
+    return { ndvi: {}, lst: {} };
+  }
+}
 
 function clamp(n: number, a: number, b: number) {
   return Math.min(b, Math.max(a, n));
@@ -125,6 +141,11 @@ async function main() {
   const zoneCenter = new Map(
     ZONE_META.map((z) => [z.id, z.coordinates] as const)
   );
+  const ee = loadEeOverrides();
+  const ZONE_NDVI = { ...DEFAULT_ZONE_NDVI, ...ee.ndvi };
+  if (Object.keys(ee.ndvi).length) {
+    console.log('Using EE overrides for', Object.keys(ee.ndvi).length, 'zones');
+  }
 
   console.log('Fetching live Open-Meteo weather (1 request)…');
   const wx = await weatherIslamabad();
@@ -144,6 +165,7 @@ async function main() {
 
     const baseNdvi = ZONE_NDVI[c.zoneId] ?? 0.3;
     const ndvi = clamp(baseNdvi * (0.85 + (1 - edge) * 0.2 + relief * 0.1), 0, 1);
+    const lst = ee.lst[c.zoneId] ?? wx.temperature;
 
     // Settlement denser near markaz / zone center
     const settle = clamp(
@@ -154,7 +176,7 @@ async function main() {
     const population = Math.round(settle * 40);
 
     const risk = calculateRisk({
-      temperature: wx.temperature,
+      temperature: lst,
       humidity: wx.humidity,
       vegetationIndex: ndvi,
       rainfallRecent: wx.rainfall,
@@ -174,8 +196,8 @@ async function main() {
       zoneId: c.zoneId,
       tehsil: c.tehsil,
       ndvi: Math.round(ndvi * 100) / 100,
-      lst: wx.temperature,
-      temperature: wx.temperature,
+      lst,
+      temperature: lst,
       humidity: wx.humidity,
       rainfall: wx.rainfall,
       depressionScore: dep,
