@@ -9,6 +9,7 @@ interface ZoneMapLazyProps {
   setOverlay: (overlay: MapOverlay) => void;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
+  gridEpoch?: number;
 }
 
 /** Leaflet is browser-only — load the map after mount so SSR stays clean. */

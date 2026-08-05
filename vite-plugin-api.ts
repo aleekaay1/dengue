@@ -43,6 +43,21 @@ export function dengueApiPlugin(): Plugin {
             return;
           }
 
+          if (url.pathname === '/api/grid-refresh') {
+            const { handleGridRefreshRequest } = await server.ssrLoadModule(
+              '/api/grid-refresh.ts'
+            );
+            const result = await handleGridRefreshRequest(
+              url,
+              req.method ?? 'GET'
+            );
+            res.statusCode = result.status;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'no-store');
+            res.end(JSON.stringify(result.body));
+            return;
+          }
+
           if (url.pathname === '/api/cron/refresh') {
             const { handleRefreshRequest } = await server.ssrLoadModule(
               '/api/cron/refresh.ts'

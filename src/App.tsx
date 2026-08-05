@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { ZoneData, ActiveTab, MapOverlay } from './types';
 import type { InitialDashboardData } from './types/ssr';
 import { Header } from './components/Header';
@@ -37,6 +37,12 @@ export default function App({ initialData = null }: AppProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [mapOverlay, setMapOverlay] = useState<MapOverlay>('risk');
   const [mapFullscreen, setMapFullscreen] = useState(false);
+  const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const [analyzeProgress, setAnalyzeProgress] = useState<{
+    step: number;
+    total: number;
+  } | null>(null);
+  const [gridEpoch, setGridEpoch] = useState(0);
 
   useEffect(() => {
     if (liveZones.length) {
@@ -73,9 +79,60 @@ export default function App({ initialData = null }: AppProps) {
     );
   };
 
-  const handleRefresh = () => {
-    void reload({ live: true, refresh: true });
-  };
+  const handleRefresh = useCallback(() => {
+    void (async () => {
+      setAnalyzing('Updating zone weather & vegetation…');
+      setAnalyzeProgress(null);
+      try {
+        await reload({ live: true, refresh: true });
+
+        const listRes = await fetch('/api/grid-refresh?action=zones');
+        if (!listRes.ok) {
+          const err = (await listRes.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          setAnalyzing(
+            err.error ||
+              'Block grid refresh unavailable (connect Supabase service role). Zone feeds updated.'
+          );
+          await new Promise((r) => setTimeout(r, 2800));
+          return;
+        }
+        const list = (await listRes.json()) as {
+          zones: { id: string; name: string; step: number }[];
+          count: number;
+        };
+        const total = list.count || list.zones.length;
+
+        for (const z of list.zones) {
+          setAnalyzing(`Analyzing ${z.name} — live weather + EE canopy…`);
+          setAnalyzeProgress({ step: z.step + 1, total });
+          const res = await fetch(
+            `/api/grid-refresh?zone=${encodeURIComponent(z.id)}`,
+            { method: 'POST' }
+          );
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as {
+              error?: string;
+            };
+            throw new Error(body.error || `Failed on ${z.name}`);
+          }
+        }
+
+        setGridEpoch((n) => n + 1);
+        setAnalyzing('Saved to Supabase — map reloading cached blocks…');
+        await new Promise((r) => setTimeout(r, 900));
+      } catch (err) {
+        setAnalyzing(
+          err instanceof Error ? err.message : 'Analyze refresh failed'
+        );
+        await new Promise((r) => setTimeout(r, 3200));
+      } finally {
+        setAnalyzing(null);
+        setAnalyzeProgress(null);
+      }
+    })();
+  }, [reload]);
 
   if (loading && !cityConditions) {
     return (
@@ -166,10 +223,41 @@ export default function App({ initialData = null }: AppProps) {
         setActiveTab={setActiveTab}
         cityConditions={displayConditions}
         onRefresh={handleRefresh}
-        refreshing={loading}
+        refreshing={loading || Boolean(analyzing)}
       />
 
       <ConditionsStrip conditions={displayConditions} freshness={freshness} />
+
+      {analyzing && (
+        <div className="sticky top-0 z-[180] bg-[#1F3D2E] border-b border-[#D9A441] text-[#EDE6D6] px-4 py-3 shadow-lg">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <Loader2 className="w-5 h-5 text-[#D9A441] animate-spin shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-heading font-extrabold text-sm uppercase tracking-wide">
+                Analyzing — real feeds
+              </p>
+              <p className="font-mono-data text-[11px] text-[#EDE6D6]/80 truncate">
+                {analyzing}
+              </p>
+            </div>
+            {analyzeProgress && (
+              <div className="font-mono-data text-xs text-[#D9A441] shrink-0">
+                Zone {analyzeProgress.step}/{analyzeProgress.total}
+              </div>
+            )}
+          </div>
+          {analyzeProgress && (
+            <div className="max-w-7xl mx-auto mt-2 h-1.5 bg-[#14291F] rounded-xs overflow-hidden">
+              <div
+                className="h-full bg-[#D9A441] transition-all duration-500"
+                style={{
+                  width: `${(analyzeProgress.step / analyzeProgress.total) * 100}%`,
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-6">
         {activeTab === 'dashboard' && (
@@ -191,6 +279,7 @@ export default function App({ initialData = null }: AppProps) {
                 setOverlay={setMapOverlay}
                 fullscreen={mapFullscreen}
                 onToggleFullscreen={() => setMapFullscreen((v) => !v)}
+                gridEpoch={gridEpoch}
               />
             </div>
 

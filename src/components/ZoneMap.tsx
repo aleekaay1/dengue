@@ -12,6 +12,11 @@ import {
   cellPopupHtml,
   type GridCellDto,
 } from './gridMapUtils';
+import {
+  cellsInView,
+  unpackGridPack,
+  type GridPackFile,
+} from '../lib/unpackGridPack';
 
 interface ZoneMapProps {
   zones: ZoneData[];
@@ -21,16 +26,17 @@ interface ZoneMapProps {
   setOverlay: (overlay: MapOverlay) => void;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
+  /** Bumps when a full analyzing refresh finishes — reload cells from Supabase */
+  gridEpoch?: number;
 }
 
 type AreaFilter = 'all' | AreaType;
 type TehsilFilter = 'all' | string;
-/** Blocks = real 50m cells; Zones = aggregated markers only */
 type MapGrain = 'blocks' | 'zones';
 
 const ISLAMABAD_CENTER: L.LatLngExpression = [33.6938, 73.0652];
 const DEFAULT_ZOOM = 12;
-/** Above this zoom, solid choropleth blocks (no heat lattice) */
+/** Solid rectangles from this zoom; below that, thinned rects still drawn in Blocks */
 const CELL_RECT_ZOOM = 11;
 
 const HEAT_GRADIENT: Record<string, string> = {
@@ -68,47 +74,50 @@ function riskMarkerColor(level: ZoneData['riskLevel']): string {
   return '#4C8C6B';
 }
 
-function hash01(seed: string, salt: number): number {
-  let h = salt * 374761393;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 1103515245);
-  }
-  return ((h >>> 0) % 10000) / 10000;
-}
-
-/** Visible zone heat when block grid file is unavailable */
-function zoneFallbackHeat(
+/** Soft zone-center heat only (no synthetic spoke lattice) */
+function zoneCenterHeat(
   zones: ZoneData[],
   overlay: MapOverlay
 ): [number, number, number][] {
-  const points: [number, number, number][] = [];
-  for (const zone of zones) {
+  return zones.map((zone) => {
     let intensity = zone.riskScore / 100;
     if (overlay === 'vegetation') intensity = zone.vegetationIndex;
     else if (overlay === 'terrain')
       intensity = (zone.depressionRiskScore ?? 0) / 100;
     else if (overlay === 'cases') {
       const recent = zone.pastCases[zone.pastCases.length - 1]?.count ?? 0;
-      intensity = recent / 30;
+      intensity = Math.min(1, recent / 30);
     }
-    intensity = Math.min(1, Math.max(0.2, intensity));
-    const { lat, lng } = zone.coordinates;
-    const ruralScale = zone.areaType === 'rural' ? 1.35 : 1;
-    points.push([lat, lng, intensity]);
-    for (let r = 1; r <= 4; r++) {
-      const spokes = 8 + r * 2;
-      const radiusDeg = 0.007 * r * ruralScale;
-      for (let s = 0; s < spokes; s++) {
-        const angle = (s / spokes) * Math.PI * 2 + hash01(zone.id, r) * 0.3;
-        points.push([
-          lat + Math.cos(angle) * radiusDeg * 0.75,
-          lng + Math.sin(angle) * radiusDeg,
-          intensity * (1 - r / 5.5),
-        ]);
-      }
+    return [
+      zone.coordinates.lat,
+      zone.coordinates.lng,
+      Math.min(1, Math.max(0.25, intensity)),
+    ];
+  });
+}
+
+/** leaflet.heat reads pixels often — prefer willReadFrequently to silence Canvas2D warning */
+function withWillReadFrequently<T>(fn: () => T): T {
+  const proto = HTMLCanvasElement.prototype;
+  const orig = proto.getContext;
+  proto.getContext = function (
+    this: HTMLCanvasElement,
+    type: string,
+    attrs?: CanvasRenderingContext2DSettings
+  ) {
+    if (type === '2d') {
+      return orig.call(this, type, {
+        ...attrs,
+        willReadFrequently: true,
+      });
     }
+    return orig.call(this, type as '2d', attrs);
+  } as typeof orig;
+  try {
+    return fn();
+  } finally {
+    proto.getContext = orig;
   }
-  return points;
 }
 
 export const ZoneMap: React.FC<ZoneMapProps> = ({
@@ -119,6 +128,7 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
   setOverlay,
   fullscreen,
   onToggleFullscreen,
+  gridEpoch = 0,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -134,17 +144,19 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
   const [areaFilter, setAreaFilter] = useState<AreaFilter>('all');
   const [tehsilFilter, setTehsilFilter] = useState<TehsilFilter>('all');
   const [mapGrain, setMapGrain] = useState<MapGrain>('blocks');
-  const [gridPoints, setGridPoints] = useState<[number, number, number][] | null>(
-    null
-  );
-  const [allGridCells, setAllGridCells] = useState<GridCellDto[]>([]);
+  const [packCells, setPackCells] = useState<GridCellDto[]>([]);
+  const [viewCells, setViewCells] = useState<GridCellDto[]>([]);
   const [cellSizeM, setCellSizeM] = useState(50);
   const [gridMeta, setGridMeta] = useState<{
     count: number;
     computedAt: string | null;
-    pilot: boolean;
+    source: string;
   } | null>(null);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [gridStatus, setGridStatus] = useState<'loading' | 'ready' | 'empty'>(
+    'loading'
+  );
+  const [moveTick, setMoveTick] = useState(0);
 
   onSelectRef.current = onSelectZone;
   overlayRef.current = overlay;
@@ -163,128 +175,146 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     return TEHSILS.filter((t) => present.has(t));
   }, [zones]);
 
-  // Static /grid_heat.json ships with the client (Vercel-safe). API is for zoomed cells.
+  // Initial load: Supabase summary → else static pack (real offline EE+weather scores)
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      setGridStatus('loading');
       try {
-        let points: [number, number, number][] | null = null;
-        let meta = { count: 0, computedAt: null as string | null, pilot: false };
-        let size = 50;
-
-        const staticRes = await fetch('/grid_heat.json');
-        if (staticRes.ok) {
-          const data = (await staticRes.json()) as {
-            cellSizeM?: number;
+        const summaryRes = await fetch('/api/grid?summary=1');
+        if (summaryRes.ok) {
+          const summary = (await summaryRes.json()) as {
+            cellCount?: number;
             computedAt?: string | null;
-            count?: number;
-            points?: [number, number, number][];
+            cellSizeM?: number;
+            source?: string;
           };
-          if (data.points?.length) {
-            points = data.points;
-            size = data.cellSizeM ?? 50;
-            meta = {
-              count: data.count ?? data.points.length,
-              computedAt: data.computedAt ?? null,
-              pilot: false,
-            };
+          if (!cancelled && (summary.cellCount ?? 0) > 0) {
+            setCellSizeM(summary.cellSizeM ?? 50);
+            setGridMeta({
+              count: summary.cellCount ?? 0,
+              computedAt: summary.computedAt ?? null,
+              source: summary.source ?? 'api',
+            });
+            setGridStatus('ready');
+            return;
           }
         }
 
-        if (!points?.length) {
-          const api = await fetch('/api/grid?heat=1');
-          if (api.ok) {
-            const data = (await api.json()) as {
-              cellSizeM?: number;
-              computedAt?: string | null;
-              count?: number;
-              points?: [number, number, number][];
-            };
-            if (data.points?.length) {
-              points = data.points;
-              size = data.cellSizeM ?? 50;
-              meta = {
-                count: data.count ?? data.points.length,
-                computedAt: data.computedAt ?? null,
-                pilot: false,
-              };
-            }
+        const packRes = await fetch('/grid_cells_pack.json');
+        if (packRes.ok) {
+          const raw = (await packRes.json()) as GridPackFile;
+          const unpacked = unpackGridPack(raw);
+          if (!cancelled && unpacked.cells.length) {
+            setPackCells(unpacked.cells);
+            setCellSizeM(unpacked.cellSizeM);
+            setGridMeta({
+              count: unpacked.cells.length,
+              computedAt: unpacked.computedAt,
+              source: 'static-pack',
+            });
+            setGridStatus('ready');
+            return;
           }
         }
 
-        if (cancelled || !points?.length) return;
-        setCellSizeM(size);
-        setGridMeta(meta);
-        setGridPoints(points);
+        if (!cancelled) setGridStatus('empty');
       } catch {
-        /* zoneFallbackHeat */
+        if (!cancelled) setGridStatus('empty');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [gridEpoch]);
 
-  // Always refresh visible cells in Blocks mode (choropleth + hover reasons)
+  // Viewport cells: API (Supabase) preferred; else filter local pack
   useEffect(() => {
     if (mapGrain !== 'blocks') return;
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || gridStatus === 'loading') return;
+
     let cancelled = false;
-    const b = map.getBounds().pad(0.15);
-    const bbox = [
-      b.getWest(),
-      b.getSouth(),
-      b.getEast(),
-      b.getNorth(),
-    ].join(',');
-    const limit = map.getZoom() >= CELL_RECT_ZOOM ? 8000 : 2500;
+    const b = map.getBounds().pad(0.12);
+    const bbox = {
+      west: b.getWest(),
+      south: b.getSouth(),
+      east: b.getEast(),
+      north: b.getNorth(),
+    };
+    const limit = map.getZoom() >= CELL_RECT_ZOOM ? 9000 : 3500;
+    const bboxStr = `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
+
     void (async () => {
       try {
-        const res = await fetch(`/api/grid?bbox=${bbox}&limit=${limit}`);
-        if (!res.ok) return;
-        const body = (await res.json()) as { cells?: GridCellDto[] };
-        if (!cancelled && body.cells?.length) setAllGridCells(body.cells);
+        const res = await fetch(
+          `/api/grid?bbox=${encodeURIComponent(bboxStr)}&limit=${limit}`
+        );
+        if (res.ok) {
+          const body = (await res.json()) as {
+            cells?: GridCellDto[];
+            computedAt?: string | null;
+            source?: string;
+            count?: number;
+          };
+          if (!cancelled && body.cells?.length) {
+            setViewCells(body.cells);
+            setGridMeta((prev) => ({
+              count: prev?.count ?? body.count ?? body.cells!.length,
+              computedAt: body.computedAt ?? prev?.computedAt ?? null,
+              source: body.source ?? prev?.source ?? 'api',
+            }));
+            return;
+          }
+        }
       } catch {
-        /* ignore */
+        /* fall through to pack */
+      }
+
+      if (cancelled) return;
+      if (packCells.length) {
+        const zoneFilter = new Set<string>(filteredZones.map((z) => z.id));
+        const local = cellsInView(packCells, bbox, zoneFilter);
+        const step =
+          local.length > limit ? Math.ceil(local.length / limit) : 1;
+        setViewCells(local.filter((_, i) => i % step === 0));
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [zoom, mapGrain]);
-
-  const heatPoints = useMemo(() => {
-    // Zones mode: soft zone clouds. Blocks overview: thinned static heat (no lattice).
-    if (mapGrain === 'zones' || !gridPoints?.length) {
-      return zoneFallbackHeat(filteredZones, overlay);
-    }
-    if (filteredZones.length < zones.length) {
-      const zoneFilter = new Set(filteredZones.map((z) => z.id));
-      // Prefer viewport cells when filtering
-      if (allGridCells.length) {
-        return allGridCells
-          .filter((c) => zoneFilter.has(c.zoneId))
-          .filter((_, i) => i % 3 === 0)
-          .map(
-            (c) =>
-              [c.lat, c.lng, cellIntensity(c, overlay)] as [
-                number,
-                number,
-                number,
-              ]
-          );
-      }
-    }
-    return gridPoints;
   }, [
     mapGrain,
-    gridPoints,
+    zoom,
+    moveTick,
+    gridStatus,
+    packCells,
     filteredZones,
-    overlay,
-    allGridCells,
-    zones.length,
+    gridEpoch,
   ]);
+
+  const heatPoints = useMemo(() => {
+    if (mapGrain === 'zones') {
+      return zoneCenterHeat(filteredZones, overlay);
+    }
+    // Blocks overview heat from thinned view/pack cells (real scores)
+    const src = viewCells.length ? viewCells : packCells;
+    if (!src.length) return zoneCenterHeat(filteredZones, overlay);
+    const zoneFilter = new Set(filteredZones.map((z) => z.id));
+    const step = Math.max(1, Math.ceil(src.length / 4000));
+    return src
+      .filter((c) => zoneFilter.has(c.zoneId))
+      .filter((_, i) => i % step === 0)
+      .map(
+        (c) =>
+          [c.lat, c.lng, cellIntensity(c, overlay)] as [
+            number,
+            number,
+            number,
+          ]
+      );
+  }, [mapGrain, filteredZones, overlay, viewCells, packCells]);
 
   const redrawCellRects = useCallback(() => {
     const map = mapRef.current;
@@ -293,14 +323,16 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     group.clearLayers();
 
     if (grainRef.current !== 'blocks') return;
-    if (map.getZoom() < CELL_RECT_ZOOM) return;
-    if (!allGridCells.length) return;
+
+    const cells = viewCells.length ? viewCells : packCells;
+    if (!cells.length) return;
 
     const bounds = map.getBounds();
-    const pad = 0.003;
+    const pad = 0.004;
     const zoneFilter = new Set(filteredZones.map((z) => z.id));
+    const z = map.getZoom();
 
-    const visible = allGridCells.filter(
+    let visible = cells.filter(
       (c) =>
         zoneFilter.has(c.zoneId) &&
         c.lat >= bounds.getSouth() - pad &&
@@ -309,8 +341,10 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         c.lng <= bounds.getEast() + pad
     );
 
-    const maxDraw = 5000;
-    const step = visible.length > maxDraw ? Math.ceil(visible.length / maxDraw) : 1;
+    // Zoomed out: still show solid blocks, just thinned
+    const maxDraw = z >= CELL_RECT_ZOOM ? 6000 : z >= 10 ? 2500 : 1200;
+    const step =
+      visible.length > maxDraw ? Math.ceil(visible.length / maxDraw) : 1;
 
     for (let i = 0; i < visible.length; i += step) {
       const c = visible[i];
@@ -322,10 +356,10 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           [c.north, c.east],
         ],
         {
-          color: 'rgba(20,30,20,0.45)',
-          weight: 0.6,
+          color: 'rgba(20,30,20,0.35)',
+          weight: z >= CELL_RECT_ZOOM ? 0.55 : 0.25,
           fillColor: fill,
-          fillOpacity: 0.88,
+          fillOpacity: z >= CELL_RECT_ZOOM ? 0.9 : 0.72,
           interactive: true,
         }
       );
@@ -339,7 +373,7 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       rect.bindPopup(html, { maxWidth: 340 });
       group.addLayer(rect);
     }
-  }, [allGridCells, filteredZones, cellSizeM]);
+  }, [viewCells, packCells, filteredZones, cellSizeM]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -362,31 +396,22 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     cellsRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
-    const onZoom = () => {
+    const onMove = () => {
       setZoom(map.getZoom());
-      redrawCellRects();
-      // Fade heat when rectangles take over
-      if (heatRef.current) {
-        const el = (heatRef.current as unknown as { _canvas?: HTMLCanvasElement })
-          ._canvas;
-        if (el) {
-          el.style.opacity = map.getZoom() >= CELL_RECT_ZOOM ? '0.15' : '0.9';
-        }
-      }
+      setMoveTick((t) => t + 1);
     };
-    map.on('zoomend moveend', onZoom);
+    map.on('zoomend moveend', onMove);
 
     requestAnimationFrame(() => map.invalidateSize());
 
     return () => {
-      map.off('zoomend moveend', onZoom);
+      map.off('zoomend moveend', onMove);
       map.remove();
       mapRef.current = null;
       heatRef.current = null;
       markersRef.current = null;
       cellsRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -416,8 +441,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       heatRef.current = null;
     }
 
-    if (mapGrain === 'zones' && !gridPoints?.length) {
-      // zone-only fallback
+    // Blocks with solid rects: hide heat so lattice never dominates
+    if (mapGrain === 'blocks' && (viewCells.length || packCells.length)) {
+      if (map.getZoom() >= CELL_RECT_ZOOM - 1) return;
     }
 
     const gradient =
@@ -429,26 +455,27 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
             ? TERRAIN_GRADIENT
             : HEAT_GRADIENT;
 
-    // Blocks at z11+: solid rectangles only — hide heat so the lattice of dots never shows
-    if (mapGrain === 'blocks' && map.getZoom() >= CELL_RECT_ZOOM) {
-      return;
-    }
-
     const z = map.getZoom();
-    const radiusPx = z >= 12 ? 32 : 40;
-    const blurPx = z >= 12 ? 28 : 36;
-
-    const layer = L.heatLayer(heatPoints, {
-      radius: radiusPx,
-      blur: blurPx,
-      maxZoom: 17,
-      max: 1,
-      minOpacity: 0.55,
-      gradient,
-    });
+    const layer = withWillReadFrequently(() =>
+      L.heatLayer(heatPoints, {
+        radius: mapGrain === 'zones' ? 48 : z >= 12 ? 28 : 36,
+        blur: mapGrain === 'zones' ? 42 : z >= 12 ? 24 : 32,
+        maxZoom: 17,
+        max: 1,
+        minOpacity: mapGrain === 'zones' ? 0.45 : 0.5,
+        gradient,
+      })
+    );
     layer.addTo(map);
     heatRef.current = layer;
-  }, [heatPoints, overlay, mapGrain, cellSizeM, gridPoints?.length, zoom]);
+  }, [
+    heatPoints,
+    overlay,
+    mapGrain,
+    zoom,
+    viewCells.length,
+    packCells.length,
+  ]);
 
   useEffect(() => {
     const group = markersRef.current;
@@ -533,8 +560,10 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           </h2>
           <span className="font-mono-data text-[10px] text-[#EDE6D6]/50">
             {gridMeta
-              ? `${gridMeta.count} × ${cellSizeM}m cells${gridMeta.pilot ? ' (pilot)' : ''}`
-              : `${filteredZones.length} zones`}
+              ? `${gridMeta.count.toLocaleString()} × ${cellSizeM}m · ${gridMeta.source}`
+              : gridStatus === 'loading'
+                ? 'Loading grid…'
+                : `${filteredZones.length} zones`}
           </span>
         </div>
 
@@ -660,25 +689,19 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       <div className={`relative flex-1 ${fullscreen ? 'min-h-0' : 'min-h-[420px]'}`}>
         <div ref={containerRef} className="absolute inset-0 z-0" />
 
-        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] shadow-lg z-[500] pointer-events-none max-w-[240px]">
+        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] shadow-lg z-[500] pointer-events-none max-w-[260px]">
           <div className="font-heading font-bold text-xs uppercase mb-1.5 border-b border-[#2D5843] pb-1 flex items-center justify-between gap-2">
             <span>
-              {zoom >= CELL_RECT_ZOOM && mapGrain === 'blocks'
+              {mapGrain === 'blocks'
                 ? `${cellSizeM}m surveillance blocks`
-                : overlay === 'risk'
-                  ? 'Block risk overview'
-                  : overlay === 'vegetation'
-                    ? 'Canopy (NDVI)'
-                    : overlay === 'terrain'
-                      ? 'Terrain sinks'
-                      : 'People-at-risk'}
+                : 'Zone rollup'}
             </span>
             <Layers className="w-3 h-3 text-[#D9A441]" />
           </div>
           <p className="text-[10px] text-[#EDE6D6]/70 mb-1.5 leading-snug">
-            {zoom >= CELL_RECT_ZOOM && mapGrain === 'blocks'
-              ? 'Hover any block for NDVI, LST, terrain, settlement & score factors. Not household-level.'
-              : 'Zoom in for solid coloured blocks with hover explanations (ministry view).'}
+            {mapGrain === 'blocks'
+              ? 'Hover a block for NDVI, LST, terrain, settlement & score factors. Cached in Supabase; Refresh re-analyzes live weather.'
+              : 'Zone markers only — switch to Blocks for 50m cells.'}
           </p>
           <div
             className={`h-2 w-36 rounded-xs mb-1.5 bg-gradient-to-r ${
@@ -738,9 +761,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         <div className="flex items-center gap-1.5">
           <MapPin className="w-3.5 h-3.5 text-[#D9A441]" />
           <span>
-            Real 50m blocks · OSM + DEM + weather
+            Real 50m blocks · Open-Meteo + EE NDVI/LST + DEM seed
             {gridMeta?.computedAt
-              ? ` · grid ${gridMeta.computedAt.slice(0, 10)}`
+              ? ` · ${gridMeta.computedAt.slice(0, 16).replace('T', ' ')}`
               : ''}
           </span>
         </div>

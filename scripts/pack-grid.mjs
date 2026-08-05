@@ -1,8 +1,15 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
+mkdirSync('public', { recursive: true });
 const raw = JSON.parse(readFileSync('data/grid_cells_latest.json', 'utf8'));
 if (Array.isArray(raw.cells?.[0]) && raw.cells[0].length >= 16) {
-  console.log('already packed v2', (Buffer.byteLength(JSON.stringify(raw)) / 1e6).toFixed(1), 'MB');
+  const json = JSON.stringify(raw);
+  writeFileSync('public/grid_cells_pack.json', json);
+  console.log(
+    'already packed v2 — copied to public/grid_cells_pack.json',
+    (Buffer.byteLength(json) / 1e6).toFixed(1),
+    'MB'
+  );
   process.exit(0);
 }
 
@@ -40,6 +47,7 @@ const packed = {
 };
 const json = JSON.stringify(packed);
 writeFileSync('data/grid_cells_latest.json', json);
+writeFileSync('public/grid_cells_pack.json', json);
 writeFileSync(
   'data/grid_heat_points.json',
   JSON.stringify({
@@ -55,4 +63,10 @@ writeFileSync(
       ]),
   })
 );
-console.log('packed', (Buffer.byteLength(json) / 1e6).toFixed(1), 'MB', packed.cellCount, 'cells');
+console.log(
+  'packed',
+  (Buffer.byteLength(json) / 1e6).toFixed(1),
+  'MB',
+  packed.cellCount,
+  'cells → data/ + public/grid_cells_pack.json'
+);

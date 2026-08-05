@@ -25,3 +25,21 @@ export function createServiceClient(): SupabaseClient {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+export function hasServiceRole(): boolean {
+  return Boolean(getSupabaseUrl() && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+/** Read client: service role preferred, else anon (RLS public SELECT on grid_cells). */
+export function createReadClient(): SupabaseClient {
+  const url = getSupabaseUrl();
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error('Supabase read client requires URL and a key');
+  }
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}

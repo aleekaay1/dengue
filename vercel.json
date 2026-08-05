@@ -5,10 +5,11 @@
   "rewrites": [
     { "source": "/api/dashboard", "destination": "/api/dashboard" },
     { "source": "/api/grid", "destination": "/api/grid" },
+    { "source": "/api/grid-refresh", "destination": "/api/grid-refresh" },
     { "source": "/api/cron/refresh", "destination": "/api/cron/refresh" },
     { "source": "/api/ssr", "destination": "/api/ssr" },
     {
-      "source": "/((?!assets/|grid_heat\\.json|favicon\\.ico|.*\\.png$).*)",
+      "source": "/((?!assets/|grid_heat\\.json|grid_cells_pack\\.json|favicon\\.ico|.*\\.(png|jpg|svg|webp)$).*)",
       "destination": "/api/ssr"
     }
   ],
@@ -19,6 +20,10 @@
     },
     "api/grid.ts": {
       "maxDuration": 30,
+      "includeFiles": "{lib/**,data/**}"
+    },
+    "api/grid-refresh.ts": {
+      "maxDuration": 60,
       "includeFiles": "{lib/**,data/**}"
     },
     "api/cron/refresh.ts": {

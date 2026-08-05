@@ -22,6 +22,7 @@
     "grid:ingest-ee": "node scripts/ingest-ee-layers.mjs",
     "grid:pilot": "tsx scripts/compute-grid.ts --pilot",
     "grid:full": "tsx scripts/compute-grid.ts --full",
+    "grid:refresh-local": "tsx scripts/refresh-grid-local.ts",
     "refresh": "tsx scripts/refresh-local.ts"
   },
   "dependencies": {
