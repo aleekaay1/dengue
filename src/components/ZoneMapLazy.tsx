@@ -33,11 +33,9 @@ export const ZoneMapLazy: React.FC<ZoneMapLazyProps> = (props) => {
 
   if (!Map) {
     return (
-      <div className="bg-[#14291F] border-2 border-[#2D5843] rounded-xs min-h-[480px] h-[min(70vh,640px)] flex flex-col items-center justify-center text-[#EDE6D6] gap-2">
-        <div className="w-2.5 h-2.5 bg-[#D9A441] rounded-full animate-pulse" />
-        <p className="font-heading font-bold text-sm uppercase tracking-wide">
-          Loading ICT risk map…
-        </p>
+      <div className="bg-white border border-[var(--line)] rounded-xl min-h-[480px] h-[min(70vh,640px)] flex flex-col items-center justify-center text-[var(--muted)] gap-2">
+        <div className="w-2.5 h-2.5 bg-[var(--brand)] rounded-full animate-pulse" />
+        <p className="font-heading font-semibold text-sm">Loading map…</p>
       </div>
     );
   }

@@ -28,12 +28,19 @@ export function displayGridStep(blockM = DISPLAY_BLOCK_M): {
   return { degLat, degLng };
 }
 
-/** Keep cells that look settled or already elevated risk — drop river/empty fringe. */
+/**
+ * Keep cells worth showing. Parks / green belts (high vegetation) and terrain
+ * sinks (standing-water risk) stay even when settlement is low — those used
+ * to be dropped and made parks look empty/low-risk on the map.
+ */
 export function isDisplayWorthy(c: GridCellDto): boolean {
-  if (c.settlementDensity < 0.14 && c.ndvi > 0.42 && c.riskScore < 50) {
-    return false;
-  }
+  const parkOrGreen = c.ndvi >= 0.32;
+  const sink = c.depressionScore >= 22;
+  if (parkOrGreen || sink) return true;
   if (c.settlementDensity < 0.16 && c.riskScore < 42) return false;
+  if (c.settlementDensity < 0.12 && c.ndvi < 0.2 && c.riskScore < 48) {
+    return false; // bare empty fringe only
+  }
   return true;
 }
 

@@ -21,7 +21,7 @@ export const RiskBadge: React.FC<RiskBadgeProps> = ({
           bg: 'bg-[#B5432A]',
           text: 'text-white',
           border: 'border-[#8F2E19]',
-          label: 'HIGH RISK',
+          label: 'High risk',
           accentBg: 'bg-[#8F2E19]',
         };
       case 'medium':
@@ -29,7 +29,7 @@ export const RiskBadge: React.FC<RiskBadgeProps> = ({
           bg: 'bg-[#D9A441]',
           text: 'text-[#23241F]',
           border: 'border-[#B88528]',
-          label: 'MEDIUM RISK',
+          label: 'Medium risk',
           accentBg: 'bg-[#B88528]',
         };
       case 'low':
@@ -38,7 +38,7 @@ export const RiskBadge: React.FC<RiskBadgeProps> = ({
           bg: 'bg-[#4C8C6B]',
           text: 'text-white',
           border: 'border-[#386B51]',
-          label: 'LOW RISK',
+          label: 'Lower risk',
           accentBg: 'bg-[#386B51]',
         };
     }

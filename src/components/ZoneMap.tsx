@@ -5,7 +5,6 @@ import 'leaflet.heat';
 import { ZoneData, MapOverlay, AreaType } from '../types';
 import { RiskBadge } from './RiskBadge';
 import { Layers, MapPin, Maximize2, Minimize2 } from 'lucide-react';
-import { TEHSILS } from '../../lib/zoneMeta';
 import {
   cellFillColor,
   cellIntensity,
@@ -49,27 +48,6 @@ function riskMarkerColor(level: ZoneData['riskLevel']): string {
   if (level === 'high') return '#B5432A';
   if (level === 'medium') return '#D9A441';
   return '#4C8C6B';
-}
-
-function zoneCenterHeat(
-  zones: ZoneData[],
-  overlay: MapOverlay
-): [number, number, number][] {
-  return zones.map((zone) => {
-    let intensity = zone.riskScore / 100;
-    if (overlay === 'vegetation') intensity = zone.vegetationIndex;
-    else if (overlay === 'terrain')
-      intensity = (zone.depressionRiskScore ?? 0) / 100;
-    else if (overlay === 'cases') {
-      const recent = zone.pastCases[zone.pastCases.length - 1]?.count ?? 0;
-      intensity = Math.min(1, recent / 30);
-    }
-    return [
-      zone.coordinates.lat,
-      zone.coordinates.lng,
-      Math.min(1, Math.max(0.25, intensity)),
-    ];
-  });
 }
 
 export const ZoneMap: React.FC<ZoneMapProps> = ({
@@ -123,11 +101,6 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     });
   }, [zones, areaFilter, tehsilFilter]);
 
-  const tehsilOptions = useMemo(() => {
-    const present = new Set(zones.map((z) => z.tehsil));
-    return TEHSILS.filter((t) => present.has(t));
-  }, [zones]);
-
   // Load pack → filter empty/river → aggregate to ~200 m display blocks
   useEffect(() => {
     let cancelled = false;
@@ -157,12 +130,12 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
   }, [gridEpoch]);
 
   const heatPoints = useMemo(() => {
-    if (mapGrain === 'zones') return zoneCenterHeat(filteredZones, overlay);
+    // Always from real display blocks (never zone-center-only blobs)
     const zoneFilter = new Set(filteredZones.map((z) => z.id));
     const src = displayBlocks.filter((c) => zoneFilter.has(c.zoneId));
-    // Overview heat: only elevated risk, thinned
+    const minScore = mapGrain === 'zones' ? 48 : 45;
     return src
-      .filter((c) => c.riskScore >= 45)
+      .filter((c) => c.riskScore >= minScore)
       .filter((_, i) => i % 2 === 0)
       .map(
         (c) =>
@@ -179,13 +152,13 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     const group = cellsRef.current;
     if (!map || !group) return;
     group.clearLayers();
-    if (grainRef.current !== 'blocks') return;
     if (!displayBlocks.length) return;
 
     const bounds = map.getBounds();
     const pad = 0.006;
     const zoneFilter = new Set(filteredZones.map((z) => z.id));
     const z = map.getZoom();
+    const zonesMode = grainRef.current === 'zones';
 
     let visible = displayBlocks.filter(
       (c) =>
@@ -196,23 +169,23 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         c.lng <= bounds.getEast() + pad
     );
 
-    // Prefer medium+ risk when zoomed out
-    if (z < 12) {
+    // Zones view: hotspot tiles inside the zone (works at every zoom)
+    if (zonesMode) {
+      visible = visible.filter((c) => c.riskScore >= 45);
+    } else if (z < 12) {
       visible = visible.filter((c) => c.riskScore >= 42);
     }
 
-    // Prefer whole tiles (no step-thinning) so the fishnet stays seamless;
-    // only thin by risk when very zoomed out.
     let draw = visible;
     if (z < 12 && draw.length > 400) {
       draw = draw.filter((c) => c.riskScore >= 48);
     }
     if (draw.length > 800) {
-      // Spatial thin by cellId hash — keeps a regular lattice, avoids overlap densify
       draw = draw.filter((c) => {
         let h = 0;
-        for (let i = 0; i < c.cellId.length; i++) h = (h + c.cellId.charCodeAt(i) * (i + 1)) % 5;
-        return h === 0 || h === 1 || h === 2; // keep ~60%
+        for (let i = 0; i < c.cellId.length; i++)
+          h = (h + c.cellId.charCodeAt(i) * (i + 1)) % 5;
+        return h === 0 || h === 1 || h === 2;
       });
     }
 
@@ -228,11 +201,10 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           [c.north, c.east],
         ],
         {
-          color: selected ? '#14532d' : 'rgba(20,40,20,0.35)',
-          weight: selected ? 3 : 0.6,
+          color: selected ? '#14532d' : 'rgba(20,40,20,0.28)',
+          weight: selected ? 3 : 0.5,
           fillColor: selected ? '#22c55e' : fill,
-          // Uniform opacity — overlaps caused dark patches before (now tiles don't overlap)
-          fillOpacity: selected ? 0.72 : 0.3,
+          fillOpacity: selected ? 0.72 : zonesMode ? 0.38 : 0.3,
           interactive: true,
         }
       );
@@ -314,15 +286,15 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       heatRef.current = null;
     }
 
-    // Blocks mode: rectangles only (map stays readable)
-    if (mapGrain === 'blocks') return;
+    // Soft overview heat only when zoomed out — zoomed-in uses rectangles
+    if (map.getZoom() >= 13) return;
 
     const layer = L.heatLayer(heatPoints, {
-      radius: 48,
-      blur: 42,
-      maxZoom: 17,
+      radius: mapGrain === 'zones' ? 28 : 32,
+      blur: mapGrain === 'zones' ? 24 : 28,
+      maxZoom: 16,
       max: 1,
-      minOpacity: 0.4,
+      minOpacity: 0.28,
       gradient: HEAT_GRADIENT,
     });
     layer.addTo(map);
@@ -403,43 +375,39 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
   }, []);
 
   const shellClass = fullscreen
-    ? 'fixed inset-0 z-[200] bg-[#14291F] flex flex-col'
-    : 'bg-[#14291F] border-2 border-[#2D5843] rounded-xs shadow-md overflow-hidden relative flex flex-col h-[min(70vh,640px)] min-h-[480px]';
+    ? 'fixed inset-0 z-[200] bg-white flex flex-col'
+    : 'bg-white border border-[var(--line)] rounded-xl shadow-sm overflow-hidden relative flex flex-col h-[min(70vh,640px)] min-h-[480px]';
 
   return (
     <div className={shellClass}>
-      <div className="bg-[#1F3D2E] p-3 border-b border-[#2D5843] flex flex-wrap items-center justify-between gap-2 z-10">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 bg-[#D9A441] rounded-full" />
-          <h2 className="font-heading font-extrabold text-sm uppercase tracking-wide text-[#EDE6D6]">
-            ICT Risk Map
+      <div className="bg-white p-3 border-b border-[var(--line)] flex flex-wrap items-center justify-between gap-2 z-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <h2 className="font-heading font-bold text-sm text-[var(--ink)]">
+            Islamabad risk map
           </h2>
-          <span className="font-mono-data text-[10px] text-[#EDE6D6]/50">
+          <span className="font-mono-data text-[10px] text-[var(--muted)] truncate">
             {gridMeta
-              ? `${gridMeta.count.toLocaleString()} × ~${DISPLAY_BLOCK_M}m blocks`
+              ? `${gridMeta.count.toLocaleString()} areas · ~${DISPLAY_BLOCK_M}m`
               : 'Loading…'}
           </span>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 bg-[#14291F] p-1 rounded-xs border border-[#2D5843]">
+          <div className="flex items-center gap-0.5 bg-[var(--bg)] p-0.5 rounded-lg border border-[var(--line)]">
             {(
               [
-                ['blocks', 'Blocks', 'bg-sky-700 text-white'],
-                ['zones', 'Zones', 'bg-[#D9A441] text-[#23241F]'],
+                ['blocks', 'Areas'],
+                ['zones', 'Zones'],
               ] as const
-            ).map(([key, label, activeClass]) => (
+            ).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
-                onClick={() => {
-                  setMapGrain(key);
-                  if (key === 'zones') onSelectBlock(null);
-                }}
-                className={`px-2.5 py-1 text-xs font-heading font-bold rounded-xs transition-colors ${
+                onClick={() => setMapGrain(key)}
+                className={`px-2.5 py-1 text-xs font-heading font-semibold rounded-md transition-colors ${
                   mapGrain === key
-                    ? activeClass
-                    : 'text-[#EDE6D6]/70 hover:text-white'
+                    ? 'bg-[var(--brand)] text-white'
+                    : 'text-[var(--muted)] hover:text-[var(--ink)]'
                 }`}
               >
                 {label}
@@ -447,22 +415,48 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
             ))}
           </div>
 
-          <div className="flex items-center gap-1 bg-[#14291F] p-1 rounded-xs border border-[#2D5843]">
+          <div className="flex items-center gap-0.5 bg-[var(--bg)] p-0.5 rounded-lg border border-[var(--line)]">
             {(
               [
-                ['risk', 'Risk', 'bg-[#D9A441] text-[#23241F]'],
-                ['vegetation', 'Canopy', 'bg-[#4C8C6B] text-white'],
-                ['terrain', 'Terrain', 'bg-sky-700 text-white'],
+                ['risk', 'Risk'],
+                ['vegetation', 'Vegetation'],
+                ['terrain', 'Low ground'],
               ] as const
-            ).map(([key, label, activeClass]) => (
+            ).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setOverlay(key)}
-                className={`px-2.5 py-1 text-xs font-heading font-bold rounded-xs transition-colors ${
+                className={`px-2.5 py-1 text-xs font-heading font-semibold rounded-md transition-colors ${
                   overlay === key
-                    ? activeClass
-                    : 'text-[#EDE6D6]/70 hover:text-white'
+                    ? 'bg-white text-[var(--ink)] shadow-sm'
+                    : 'text-[var(--muted)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-0.5 bg-[var(--bg)] p-0.5 rounded-lg border border-[var(--line)]">
+            {(
+              [
+                ['all', 'All'],
+                ['urban', 'Urban'],
+                ['rural', 'Rural'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setAreaFilter(key);
+                  setTehsilFilter('all');
+                }}
+                className={`px-2 py-1 text-xs font-heading font-semibold rounded-md ${
+                  areaFilter === key
+                    ? 'bg-white text-[var(--ink)] shadow-sm'
+                    : 'text-[var(--muted)]'
                 }`}
               >
                 {label}
@@ -473,7 +467,7 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           <button
             type="button"
             onClick={onToggleFullscreen}
-            className="p-1.5 rounded-xs border border-[#2D5843] text-[#EDE6D6] hover:bg-[#14291F]"
+            className="p-1.5 rounded-lg border border-[var(--line)] text-[var(--muted)] hover:bg-[var(--bg)]"
             aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen map'}
           >
             {fullscreen ? (
@@ -485,91 +479,32 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         </div>
       </div>
 
-      <div className="px-3 py-2 bg-[#14291F] border-b border-[#2D5843] flex flex-wrap gap-2 items-center">
-        <span className="text-[10px] font-heading font-bold uppercase text-[#EDE6D6]/60">
-          Area
-        </span>
-        {(
-          [
-            ['all', 'All ICT'],
-            ['urban', 'Urban'],
-            ['rural', 'Rural'],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => {
-              setAreaFilter(key);
-              setTehsilFilter('all');
-            }}
-            className={`px-2 py-0.5 text-[11px] font-heading font-bold rounded-xs border ${
-              areaFilter === key
-                ? 'bg-[#4C8C6B] border-[#4C8C6B] text-white'
-                : 'border-[#2D5843] text-[#EDE6D6]/70'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-        <span className="text-[10px] font-heading font-bold uppercase text-[#EDE6D6]/60 ml-2">
-          Tehsil
-        </span>
-        <button
-          type="button"
-          onClick={() => setTehsilFilter('all')}
-          className={`px-2 py-0.5 text-[11px] font-heading font-bold rounded-xs border ${
-            tehsilFilter === 'all'
-              ? 'bg-[#D9A441] border-[#D9A441] text-[#23241F]'
-              : 'border-[#2D5843] text-[#EDE6D6]/70'
-          }`}
-        >
-          All
-        </button>
-        {tehsilOptions.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTehsilFilter(t)}
-            className={`px-2 py-0.5 text-[11px] font-heading font-bold rounded-xs border ${
-              tehsilFilter === t
-                ? 'bg-[#D9A441] border-[#D9A441] text-[#23241F]'
-                : 'border-[#2D5843] text-[#EDE6D6]/70'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
       <div className="relative flex-1 min-h-0">
         <div ref={containerRef} className="absolute inset-0 z-0" />
 
-        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] shadow-lg z-[500] pointer-events-none max-w-[220px]">
-          <div className="font-heading font-bold text-xs uppercase mb-1 flex items-center justify-between gap-2">
+        <div className="absolute bottom-3 left-3 bg-white/95 border border-[var(--line)] p-2.5 rounded-lg text-[11px] text-[var(--ink)] shadow-md z-[500] pointer-events-none max-w-[220px]">
+          <div className="font-heading font-semibold text-xs mb-1 flex items-center justify-between gap-2">
             <span>
-              {mapGrain === 'blocks'
-                ? `~${DISPLAY_BLOCK_M}m risk blocks`
-                : 'Zone rollup'}
+              {mapGrain === 'blocks' ? 'Risk areas' : 'Zone hotspots'}
             </span>
-            <Layers className="w-3 h-3 text-[#D9A441]" />
+            <Layers className="w-3 h-3 text-[var(--brand)]" />
           </div>
-          <p className="text-[10px] text-[#EDE6D6]/70 mb-1.5 leading-snug">
+          <p className="text-[10px] text-[var(--muted)] mb-1.5 leading-snug">
             {mapGrain === 'blocks'
-              ? 'Click a block for details on the right. Empty/river cells hidden. Map stays visible under translucent fills.'
-              : 'Zone markers only — switch to Blocks for lat/lng cells.'}
+              ? 'Click a coloured square for details. Green = selected.'
+              : 'Zone pins plus elevated risk squares inside each zone — zoom in still shows hotspots.'}
           </p>
-          <div className="h-2 w-36 rounded-xs mb-1 bg-gradient-to-r from-blue-600 via-yellow-400 to-red-600" />
-          <div className="flex justify-between font-mono-data text-[10px] text-[#EDE6D6]/70">
-            <span>Low</span>
-            <span>High</span>
+          <div className="h-1.5 w-36 rounded-full mb-1 bg-gradient-to-r from-blue-500 via-yellow-400 to-red-600" />
+          <div className="flex justify-between font-mono-data text-[10px] text-[var(--muted)]">
+            <span>Lower</span>
+            <span>Higher</span>
           </div>
         </div>
 
         {hoveredZone && mapGrain === 'zones' && (
-          <div className="absolute top-3 right-3 bg-[#1F3D2E] border border-[#D9A441] p-3 rounded-xs shadow-2xl text-[#EDE6D6] z-[500] max-w-[240px] pointer-events-none">
-            <div className="flex items-center justify-between gap-2 border-b border-[#2D5843] pb-1.5 mb-1.5">
-              <span className="font-heading font-extrabold text-sm text-white uppercase">
+          <div className="absolute top-3 right-3 bg-white border border-[var(--line)] p-3 rounded-lg shadow-lg text-[var(--ink)] z-[500] max-w-[240px] pointer-events-none">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="font-heading font-bold text-sm">
                 {hoveredZone.name}
               </span>
               <RiskBadge
@@ -578,27 +513,22 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
                 size="sm"
               />
             </div>
-            <div className="text-[10px] font-mono-data text-[#D9A441] uppercase">
+            <div className="text-[10px] text-[var(--muted)]">
               {hoveredZone.tehsil}
             </div>
           </div>
         )}
       </div>
 
-      <div className="bg-[#1F3D2E] px-3 py-2 border-t border-[#2D5843] text-xs font-mono-data text-[#EDE6D6]/70 flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-[var(--bg)] px-3 py-2 border-t border-[var(--line)] text-xs text-[var(--muted)] flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <MapPin className="w-3.5 h-3.5 text-[#D9A441]" />
+          <MapPin className="w-3.5 h-3.5 text-[var(--brand)]" />
           <span>
-            Exact lat/lng blocks · click for score
+            Click an area for score factors
             {gridMeta?.computedAt
-              ? ` · ${gridMeta.computedAt.slice(0, 10)}`
+              ? ` · updated ${gridMeta.computedAt.slice(0, 10)}`
               : ''}
           </span>
-        </div>
-        <div>
-          {gridMeta
-            ? `from ${gridMeta.sourceCount.toLocaleString()} × 50m cells`
-            : ''}
         </div>
       </div>
     </div>

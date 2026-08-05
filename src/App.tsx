@@ -14,6 +14,7 @@ import { CrawlerDataBlock } from './components/CrawlerDataBlock';
 import { useDashboardData } from './hooks/useDashboardData';
 import type { GridCellDto } from './components/gridMapUtils';
 import { DISPLAY_BLOCK_M } from './lib/aggregateBlocks';
+import { AccuracyNote } from './components/AccuracyNote';
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 
 interface AppProps {
@@ -142,14 +143,14 @@ export default function App({ initialData = null }: AppProps) {
 
   if (loading && !cityConditions) {
     return (
-      <div className="min-h-screen bg-[#EDE6D6] text-[#23241F] flex flex-col items-center justify-center gap-4 font-sans">
-        <Loader2 className="w-10 h-10 text-[#1F3D2E] animate-spin" />
+      <div className="min-h-screen bg-[var(--bg)] text-[var(--ink)] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-9 h-9 text-[var(--brand)] animate-spin" />
         <div className="text-center">
-          <h1 className="font-heading font-extrabold text-lg uppercase text-[#1F3D2E]">
-            Loading surveillance feeds
+          <h1 className="font-heading font-bold text-lg text-[var(--ink)]">
+            Loading Islamabad data…
           </h1>
-          <p className="text-sm text-[#5C5E54] mt-1 max-w-sm">
-            Fetching weather, vegetation, and case data for Islamabad zones…
+          <p className="text-sm text-[var(--muted)] mt-1 max-w-sm">
+            Weather, vegetation, and zone scores
           </p>
         </div>
       </div>
@@ -158,16 +159,16 @@ export default function App({ initialData = null }: AppProps) {
 
   if (error && !cityConditions) {
     return (
-      <div className="min-h-screen bg-[#EDE6D6] text-[#23241F] flex flex-col items-center justify-center gap-4 font-sans p-6">
-        <AlertTriangle className="w-10 h-10 text-[#B5432A]" />
+      <div className="min-h-screen bg-[var(--bg)] text-[var(--ink)] flex flex-col items-center justify-center gap-4 p-6">
+        <AlertTriangle className="w-9 h-9 text-[var(--risk-high)]" />
         <div className="text-center max-w-md">
-          <h1 className="font-heading font-extrabold text-lg uppercase text-[#B5432A]">
-            Data source unavailable
+          <h1 className="font-heading font-bold text-lg text-[var(--risk-high)]">
+            Couldn’t load data
           </h1>
-          <p className="text-sm text-[#5C5E54] mt-2 font-mono-data">{error}</p>
+          <p className="text-sm text-[var(--muted)] mt-2 font-mono-data">{error}</p>
           <button
             onClick={handleRefresh}
-            className="mt-4 inline-flex items-center gap-2 bg-[#1F3D2E] text-[#EDE6D6] px-4 py-2 text-sm font-heading font-bold uppercase"
+            className="mt-4 inline-flex items-center gap-2 bg-[var(--brand)] text-white px-4 py-2 text-sm font-heading font-semibold rounded-lg"
           >
             <RefreshCw className="w-4 h-4" />
             Retry
@@ -188,7 +189,7 @@ export default function App({ initialData = null }: AppProps) {
     Boolean(error);
 
   return (
-    <div className="min-h-screen bg-[#EDE6D6] text-[#23241F] flex flex-col font-sans">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--ink)] flex flex-col">
       <CrawlerDataBlock
         zones={zones}
         cityConditions={displayConditions}
@@ -196,21 +197,17 @@ export default function App({ initialData = null }: AppProps) {
       />
 
       {showBanner && (
-        <div className="bg-[#3A2A12] text-[#F5E6C8] border-b border-[#D9A441]/40 px-4 py-2 text-[11px] font-mono-data">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-x-4 gap-y-1">
+        <div className="bg-[#fff8eb] text-[#6b4e16] border-b border-[#f0e0b8] px-4 py-2 text-[11px]">
+          <div className="max-w-[1600px] mx-auto flex flex-wrap items-center gap-x-4 gap-y-1">
             {freshness?.weatherLagged && freshness.weatherAsOf && (
-              <span className="text-[#D9A441]">
-                Weather as of {freshness.weatherAsOf}
-              </span>
+              <span>Weather as of {freshness.weatherAsOf}</span>
             )}
             {freshness && !freshness.dengueScrapeOk && (
-              <span className="text-[#F0A090]">
-                Dengue cases: demo placeholder counts
-                {freshness.dengueAsOf ? ` (as of ${freshness.dengueAsOf})` : ''}
-                — not a live hospital feed
+              <span>
+                Case counts are demo placeholders — not a live hospital feed
               </span>
             )}
-            {error && <span className="text-[#F0A090]">{error}</span>}
+            {error && <span className="text-[var(--risk-high)]">{error}</span>}
             {builtAt && (
               <span className="opacity-70 ml-auto">
                 Updated{' '}
@@ -235,27 +232,25 @@ export default function App({ initialData = null }: AppProps) {
       <ConditionsStrip conditions={displayConditions} freshness={freshness} />
 
       {analyzing && (
-        <div className="sticky top-0 z-[180] bg-[#1F3D2E] border-b border-[#D9A441] text-[#EDE6D6] px-4 py-3 shadow-lg">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <Loader2 className="w-5 h-5 text-[#D9A441] animate-spin shrink-0" />
+        <div className="sticky top-0 z-[180] bg-white border-b border-[var(--line)] px-4 py-3 shadow-sm">
+          <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <Loader2 className="w-5 h-5 text-[var(--brand)] animate-spin shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="font-heading font-extrabold text-sm uppercase tracking-wide">
-                Analyzing — real feeds
+              <p className="font-heading font-semibold text-sm text-[var(--ink)]">
+                Updating live weather…
               </p>
-              <p className="font-mono-data text-[11px] text-[#EDE6D6]/80 truncate">
-                {analyzing}
-              </p>
+              <p className="text-[11px] text-[var(--muted)] truncate">{analyzing}</p>
             </div>
             {analyzeProgress && (
-              <div className="font-mono-data text-xs text-[#D9A441] shrink-0">
-                Zone {analyzeProgress.step}/{analyzeProgress.total}
+              <div className="font-mono-data text-xs text-[var(--brand)] shrink-0">
+                {analyzeProgress.step}/{analyzeProgress.total}
               </div>
             )}
           </div>
           {analyzeProgress && (
-            <div className="max-w-7xl mx-auto mt-2 h-1.5 bg-[#14291F] rounded-xs overflow-hidden">
+            <div className="max-w-[1600px] mx-auto mt-2 h-1.5 bg-[var(--bg)] rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#D9A441] transition-all duration-500"
+                className="h-full bg-[var(--brand)] transition-all duration-500"
                 style={{
                   width: `${(analyzeProgress.step / analyzeProgress.total) * 100}%`,
                 }}
@@ -265,9 +260,9 @@ export default function App({ initialData = null }: AppProps) {
         </div>
       )}
 
-      <main className="flex-1 w-full mx-auto p-3 sm:p-4 lg:p-5 space-y-5 max-w-[1600px]">
+      <main className="flex-1 w-full mx-auto p-3 sm:p-4 lg:p-5 space-y-4 max-w-[1600px]">
         {activeTab === 'dashboard' && (
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div className="relative">
               <ZoneMapLazy
                 zones={zones}
@@ -304,21 +299,24 @@ export default function App({ initialData = null }: AppProps) {
             </div>
 
             {!mapFullscreen && (
-              <div>
-                <h3 className="font-heading font-extrabold text-sm uppercase text-[#1F3D2E] mb-2 tracking-wide">
-                  Zone rollup
-                </h3>
-                <ZoneDetailPanel
-                  zone={selectedZone}
-                  onClose={() => setSelectedZoneId(null)}
-                  onSelectAnotherZone={(id) => {
-                    setSelectedBlock(null);
-                    setSelectedZoneId(id);
-                  }}
-                  allZones={zones}
-                  weatherAsOf={freshness?.weatherAsOf}
-                />
-              </div>
+              <>
+                <AccuracyNote />
+                <div>
+                  <h3 className="font-heading font-semibold text-sm text-[var(--ink)] mb-2">
+                    Zone summary
+                  </h3>
+                  <ZoneDetailPanel
+                    zone={selectedZone}
+                    onClose={() => setSelectedZoneId(null)}
+                    onSelectAnotherZone={(id) => {
+                      setSelectedBlock(null);
+                      setSelectedZoneId(id);
+                    }}
+                    allZones={zones}
+                    weatherAsOf={freshness?.weatherAsOf}
+                  />
+                </div>
+              </>
             )}
           </div>
         )}
@@ -351,12 +349,10 @@ export default function App({ initialData = null }: AppProps) {
         )}
       </main>
 
-      <footer className="bg-[#1F3D2E] text-[#EDE6D6] border-t-2 border-[#14291F] py-4 px-6 text-xs font-mono-data mt-8">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <span>ICT Health · Dengue Surveillance</span>
-          <span className="text-[#EDE6D6]/60">
-            Islamabad · Open-Meteo · OpenStreetMap
-          </span>
+      <footer className="bg-white border-t border-[var(--line)] py-4 px-6 text-xs text-[var(--muted)] mt-6">
+        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <span>Islamabad dengue activity surveillance</span>
+          <span>Open-Meteo · satellite vegetation · OpenStreetMap</span>
         </div>
       </footer>
     </div>

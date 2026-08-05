@@ -204,37 +204,37 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
       maxContribution: max.humidity,
     },
     {
-      factor: `Vegetation / Shade (NDVI ${input.vegetationIndex.toFixed(2)})`,
+      factor: `Vegetation & shade (${input.vegetationIndex.toFixed(2)})`,
       impact: impactFromContribution(contrib.vegetation),
       description:
         input.vegetationIndex >= 0.6
-          ? `Dense canopy shade supports daytime resting sites — ${contrib.vegetation} of ${max.vegetation} possible points.`
-          : `Moderate/sparse vegetation — ${contrib.vegetation} of ${max.vegetation} possible points.`,
+          ? `Dense trees/shade support daytime resting sites — ${contrib.vegetation} of ${max.vegetation} possible points.`
+          : `Moderate/sparse plants — ${contrib.vegetation} of ${max.vegetation} possible points. (Parks can still score higher when shade is dense.)`,
       scoreContribution: contrib.vegetation,
       maxContribution: max.vegetation,
     },
     {
-      factor: `Recent Rainfall (${input.rainfallRecent.toFixed(1)} mm / ~48h)`,
+      factor: `Rainfall last ~48h (${input.rainfallRecent.toFixed(1)} mm)`,
       impact: impactFromContribution(contrib.rainfall),
       description:
         input.rainfallRecent >= 20
-          ? `Recent rain raises breeding-container opportunity — ${contrib.rainfall} of ${max.rainfall} possible points.`
-          : `Limited recent rainfall — ${contrib.rainfall} of ${max.rainfall} possible points.`,
+          ? `Recent rain can fill containers & low spots — ${contrib.rainfall} of ${max.rainfall} possible points.`
+          : `Little recent rain — ${contrib.rainfall} of ${max.rainfall} possible points.`,
       scoreContribution: contrib.rainfall,
       maxContribution: max.rainfall,
     },
     {
-      factor: `Recent Case History (${lastWeekCases} last week)`,
+      factor: `Recent dengue cases (${lastWeekCases} last week)`,
       impact: impactFromContribution(contrib.recentCases),
       description:
         lastWeekCases >= 15
           ? `Elevated recent cases suggest local transmission — ${contrib.recentCases} of ${max.recentCases} possible points.`
-          : `Recent case counts are relatively contained — ${contrib.recentCases} of ${max.recentCases} possible points.`,
+          : `Recent case counts are relatively contained — ${contrib.recentCases} of ${max.recentCases} possible points. (Demo placeholders until a hospital feed is connected.)`,
       scoreContribution: contrib.recentCases,
       maxContribution: max.recentCases,
     },
     {
-      factor: `Terrain / Standing Water Risk (${depScore}/100)`,
+      factor: `Low ground / standing-water risk (${depScore}/100)`,
       impact: impactFromContribution(contrib.depression),
       description:
         depScore >= 40

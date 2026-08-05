@@ -6,7 +6,6 @@ import {
   ListOrdered,
   BookOpen,
   Database,
-  ShieldAlert,
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
@@ -26,77 +25,60 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   refreshing,
 }) => {
-  return (
-    <header className="bg-[#1F3D2E] text-[#EDE6D6] border-b-2 border-[#14291F] sticky top-0 z-30 shadow-md">
-      <div className="h-1.5 w-full aedes-stripe-accent opacity-90" />
+  const tabs = [
+    ['dashboard', 'Map', Activity],
+    ['signatures', 'Hotspots', Sparkles],
+    ['overview', 'Zones', ListOrdered],
+    ['methodology', 'How it works', BookOpen],
+    ['admin', 'Data', Database],
+  ] as const;
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+  return (
+    <header className="bg-white border-b border-[var(--line)] sticky top-0 z-30">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between py-3 gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#EDE6D6] text-[#1F3D2E] rounded-xs flex items-center justify-center border border-[#B5432A]/30">
-              <ShieldAlert className="w-6 h-6 text-[#B5432A]" />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-[var(--brand-soft)] text-[var(--brand)] flex items-center justify-center font-heading font-extrabold text-sm shrink-0">
+              DS
             </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold font-heading text-[#EDE6D6] tracking-tight uppercase">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-extrabold font-heading text-[var(--ink)] tracking-tight">
                 Dengue Surveillance
               </h1>
-              <p className="text-xs text-[#EDE6D6]/70 font-sans flex items-center gap-1.5 mt-0.5">
-                <span>Islamabad Vector Intelligence</span>
-                <span className="text-white/30">·</span>
-                <span className="font-mono-data text-[#D9A441]">
-                  Adult biting risk
-                </span>
+              <p className="text-xs text-[var(--muted)] flex items-center gap-1.5 truncate">
+                <MapPin className="w-3 h-3 shrink-0" />
+                {cityConditions.cityName} · mosquito activity risk
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="flex items-center bg-[#14291F] border border-[#2D5843] rounded-xs px-2.5 py-1.5 text-xs font-mono-data">
-              <MapPin className="w-3.5 h-3.5 text-[#D9A441] mr-1.5 shrink-0" />
-              <span className="text-[#EDE6D6] font-semibold">
-                {cityConditions.cityName}
-              </span>
-              <span className="text-[#EDE6D6]/50 ml-1.5">
-                {cityConditions.province}
-              </span>
-            </div>
-
-            {onRefresh && (
-              <button
-                onClick={onRefresh}
-                disabled={refreshing}
-                className="flex items-center gap-1.5 bg-[#D9A441] hover:bg-[#c49233] disabled:opacity-60 text-[#23241F] px-3 py-1.5 rounded-xs font-heading font-bold text-xs uppercase tracking-wide transition-colors"
-              >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`}
-                />
-                <span>Refresh</span>
-              </button>
-            )}
-          </div>
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1.5 bg-[var(--brand)] hover:bg-[#0c5a4d] disabled:opacity-60 text-white px-3.5 py-2 rounded-lg font-heading font-semibold text-sm transition-colors self-start"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
+              />
+              Update data
+            </button>
+          )}
         </div>
 
-        <nav className="flex items-center overflow-x-auto no-scrollbar border-t border-[#2D5843] pt-1">
-          {(
-            [
-              ['dashboard', 'Map', Activity],
-              ['signatures', 'Signatures', Sparkles],
-              ['overview', 'Zone ranking', ListOrdered],
-              ['methodology', 'Methodology', BookOpen],
-              ['admin', 'Data', Database],
-            ] as const
-          ).map(([tab, label, Icon]) => (
+        <nav className="flex items-center overflow-x-auto no-scrollbar gap-1 pb-2">
+          {tabs.map(([tab, label, Icon]) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab as ActiveTab)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-heading font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${
+              onClick={() => setActiveTab(tab)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-heading font-semibold rounded-lg whitespace-nowrap transition-colors ${
                 activeTab === tab
-                  ? 'border-[#D9A441] text-[#D9A441] bg-[#14291F]/60'
-                  : 'border-transparent text-[#EDE6D6]/70 hover:text-[#EDE6D6] hover:bg-[#14291F]/30'
+                  ? 'bg-[var(--brand-soft)] text-[var(--brand)]'
+                  : 'text-[var(--muted)] hover:bg-[#f0f2f5] hover:text-[var(--ink)]'
               }`}
             >
               <Icon className="w-4 h-4" />
-              <span>{label}</span>
+              {label}
             </button>
           ))}
         </nav>
