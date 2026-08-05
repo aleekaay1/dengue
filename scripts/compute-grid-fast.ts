@@ -165,7 +165,15 @@ async function main() {
 
     const baseNdvi = ZONE_NDVI[c.zoneId] ?? 0.3;
     const ndvi = clamp(baseNdvi * (0.85 + (1 - edge) * 0.2 + relief * 0.1), 0, 1);
-    const lst = ee.lst[c.zoneId] ?? wx.temperature;
+    const lst = ee.lst[c.zoneId] ?? wx.temperature + 8;
+    // Landsat LST is land-surface (°C), typically hotter than 2 m air — do NOT
+    // feed raw LST into the Aedes 26–32°C air window. Bias air temp by relative LST.
+    const lstVals = Object.values(ee.lst);
+    const lstMean =
+      lstVals.length > 0
+        ? lstVals.reduce((a, b) => a + b, 0) / lstVals.length
+        : lst;
+    const airForRisk = clamp(wx.temperature + (lst - lstMean) * 0.4, 18, 36);
 
     // Settlement denser near markaz / zone center
     const settle = clamp(
@@ -176,7 +184,7 @@ async function main() {
     const population = Math.round(settle * 40);
 
     const risk = calculateRisk({
-      temperature: lst,
+      temperature: airForRisk,
       humidity: wx.humidity,
       vegetationIndex: ndvi,
       rainfallRecent: wx.rainfall,
@@ -196,8 +204,8 @@ async function main() {
       zoneId: c.zoneId,
       tehsil: c.tehsil,
       ndvi: Math.round(ndvi * 100) / 100,
-      lst,
-      temperature: lst,
+      lst: Math.round(lst * 10) / 10,
+      temperature: Math.round(airForRisk * 10) / 10,
       humidity: wx.humidity,
       rainfall: wx.rainfall,
       depressionScore: dep,
