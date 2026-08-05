@@ -5,9 +5,13 @@
  */
 
 import type { GridCellDto } from '../components/gridMapUtils';
+import { CAPITAL_PILOT_BBOX as CAPITAL_PILOT_BBOX_SRC } from '../../lib/gridMeta';
 
 /** Display block size in metres (source pack is 50 m). */
 export const DISPLAY_BLOCK_M = 200;
+
+/** Urban capital pilot bbox — single source of truth in lib/gridMeta. */
+export const CAPITAL_PILOT_BBOX = CAPITAL_PILOT_BBOX_SRC;
 
 /** Fixed reference latitude for ICT so lng degrees/metre stay consistent. */
 const ICT_REF_LAT = 33.70;
@@ -144,14 +148,6 @@ export function aggregateToDisplayBlocks(
 
   return out;
 }
-
-/** Urban capital pilot bbox — main Islamabad sectors (not full rural ICT). */
-export const CAPITAL_PILOT_BBOX = {
-  west: 72.97,
-  south: 33.66,
-  east: 73.14,
-  north: 33.76,
-} as const;
 
 export function filterCapitalPilot(cells: GridCellDto[]): GridCellDto[] {
   const b = CAPITAL_PILOT_BBOX;

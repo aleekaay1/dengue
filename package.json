@@ -20,6 +20,10 @@
     "grid:fast:full": "tsx scripts/compute-grid-fast.ts --full",
     "grid:pack": "node scripts/pack-grid.mjs && node scripts/publish-heat.mjs",
     "grid:ingest-ee": "node scripts/ingest-ee-layers.mjs",
+    "grid:sentinel": "node --max-old-space-size=4096 ./node_modules/tsx/dist/cli.mjs scripts/sample-sentinel-blocks.ts",
+    "grid:sentinel:pilot": "node --max-old-space-size=4096 ./node_modules/tsx/dist/cli.mjs scripts/sample-sentinel-blocks.ts --capital",
+    "grid:sentinel:zones": "node --max-old-space-size=4096 ./node_modules/tsx/dist/cli.mjs scripts/sample-sentinel-blocks.ts --pilot",
+    "grid:with-sentinel": "npm run grid:sentinel:pilot && tsx scripts/compute-grid-fast.ts --full && node scripts/pack-grid.mjs && node scripts/publish-heat.mjs",
     "grid:pilot": "tsx scripts/compute-grid.ts --pilot",
     "grid:full": "tsx scripts/compute-grid.ts --full",
     "grid:refresh-local": "tsx scripts/refresh-grid-local.ts",
@@ -40,6 +44,7 @@
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "undici": "^6.28.0",
     "vite": "^6.2.3"
   },
   "devDependencies": {

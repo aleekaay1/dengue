@@ -1,12 +1,11 @@
 /**
- * Fast deploy grid — uses already-computed real DEM depression scores + EE NDVI
- * medians + a single Open-Meteo weather pull. No 1000+ elevation API calls.
+ * Fast deploy grid — DEM depression scores + Open-Meteo weather + vegetation.
  *
- * Spatial texture: each 50m cell gets real zone NDVI/depression, modulated by
- * distance-to-zone-center (settlement falls off) and a deterministic DEM-style
- * microrelief term from lat/lng (not random fiction).
+ * Prefer true per-block Sentinel-2 NDVI / Landsat LST from:
+ *   npm run grid:sentinel:pilot   (or grid:sentinel)
+ * → data/cell_satellite.json
  *
- * For S2 COG + OSM footprint density: npm run grid:pilot (slow, overnight).
+ * Falls back to EE zone medians + spatial texture when a cell has no STAC sample.
  */
 
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
@@ -60,6 +59,24 @@ function loadEeOverrides(): {
     return { ndvi: j.ndvi ?? {}, lst: j.lst ?? {} };
   } catch {
     return { ndvi: {}, lst: {} };
+  }
+}
+
+/** Per-block STAC samples (Sentinel NDVI + Landsat LST). */
+function loadCellSatellite(): {
+  byId: Map<string, { ndvi: number | null; lst: number | null }>;
+  sources: Record<string, unknown>;
+} {
+  try {
+    const p = join(DATA, 'cell_satellite.json');
+    const j = JSON.parse(readFileSync(p, 'utf8')) as {
+      cells?: Record<string, { ndvi: number | null; lst: number | null }>;
+      sources?: Record<string, unknown>;
+    };
+    const byId = new Map(Object.entries(j.cells ?? {}));
+    return { byId, sources: j.sources ?? {} };
+  } catch {
+    return { byId: new Map(), sources: {} };
   }
 }
 
@@ -143,8 +160,15 @@ async function main() {
   );
   const ee = loadEeOverrides();
   const ZONE_NDVI = { ...DEFAULT_ZONE_NDVI, ...ee.ndvi };
-  if (Object.keys(ee.ndvi).length) {
-    console.log('Using EE overrides for', Object.keys(ee.ndvi).length, 'zones');
+  const sat = loadCellSatellite();
+  let satNdviHits = 0;
+  let satLstHits = 0;
+  if (sat.byId.size) {
+    console.log(
+      `Using per-block STAC satellite file (${sat.byId.size} cells)`
+    );
+  } else if (Object.keys(ee.ndvi).length) {
+    console.log('No cell_satellite.json — EE zone medians for', Object.keys(ee.ndvi).length, 'zones');
   }
 
   console.log('Fetching live Open-Meteo weather (1 request)…');
@@ -152,6 +176,18 @@ async function main() {
   console.log(
     `  T=${wx.temperature}°C RH=${wx.humidity}% rain48h=${wx.rainfall}mm`
   );
+
+  // Mean LST for relative bias (prefer STAC cell samples, else EE zones)
+  const stacLstVals: number[] = [];
+  for (const v of sat.byId.values()) {
+    if (v.lst != null && Number.isFinite(v.lst)) stacLstVals.push(v.lst);
+  }
+  const eeLstVals = Object.values(ee.lst);
+  const lstPool = stacLstVals.length ? stacLstVals : eeLstVals;
+  const lstMeanGlobal =
+    lstPool.length > 0
+      ? lstPool.reduce((a, b) => a + b, 0) / lstPool.length
+      : wx.temperature + 8;
 
   const scored = cells.map((c) => {
     const center = zoneCenter.get(c.zoneId)!;
@@ -163,17 +199,33 @@ async function main() {
     const zoneDep = depByZone.get(c.zoneId) ?? 20;
     const dep = Math.round(clamp(zoneDep * (0.65 + relief * 0.7), 0, 100));
 
-    const baseNdvi = ZONE_NDVI[c.zoneId] ?? 0.3;
-    const ndvi = clamp(baseNdvi * (0.85 + (1 - edge) * 0.2 + relief * 0.1), 0, 1);
-    const lst = ee.lst[c.zoneId] ?? wx.temperature + 8;
-    // Landsat LST is land-surface (°C), typically hotter than 2 m air — do NOT
-    // feed raw LST into the Aedes 26–32°C air window. Bias air temp by relative LST.
-    const lstVals = Object.values(ee.lst);
-    const lstMean =
-      lstVals.length > 0
-        ? lstVals.reduce((a, b) => a + b, 0) / lstVals.length
-        : lst;
-    const airForRisk = clamp(wx.temperature + (lst - lstMean) * 0.4, 18, 36);
+    const satCell = sat.byId.get(c.cellId);
+    let ndvi: number;
+    if (satCell?.ndvi != null && Number.isFinite(satCell.ndvi)) {
+      ndvi = clamp(satCell.ndvi, 0, 1);
+      satNdviHits++;
+    } else {
+      const baseNdvi = ZONE_NDVI[c.zoneId] ?? 0.3;
+      ndvi = clamp(
+        baseNdvi * (0.85 + (1 - edge) * 0.2 + relief * 0.1),
+        0,
+        1
+      );
+    }
+
+    let lst: number;
+    if (satCell?.lst != null && Number.isFinite(satCell.lst)) {
+      lst = satCell.lst;
+      satLstHits++;
+    } else {
+      lst = ee.lst[c.zoneId] ?? wx.temperature + 8;
+    }
+    // Landsat LST is land-surface (°C) — bias air temp by relative LST, don't use raw LST as air.
+    const airForRisk = clamp(
+      wx.temperature + (lst - lstMeanGlobal) * 0.4,
+      18,
+      36
+    );
 
     // Settlement from land-cover cues (NDVI + relief), mild edge fade — avoid
     // hard circular “bullseyes” around every zone center
@@ -223,8 +275,12 @@ async function main() {
   });
 
   mkdirSync(DATA, { recursive: true });
+  console.log(
+    `  STAC NDVI hits: ${satNdviHits}/${cells.length} · LST hits: ${satLstHits}/${cells.length}`
+  );
+
   const payload = {
-    note: '50m block grid. Weather live Open-Meteo; NDVI from EE medians; depression from Priority-Flood zone seed, spatially textured. Not household-level.',
+    note: '50m block grid. Weather Open-Meteo; NDVI/LST prefer per-block STAC Sentinel/Landsat when present. Not household-level.',
     cellSizeM: GRID_CELL_SIZE_M,
     bbox: ICT_BBOX,
     pilot: !full,
@@ -234,7 +290,15 @@ async function main() {
     sources: {
       dem: 'Open-Meteo Priority-Flood zone scores (terrain_depressions) + spatial texture',
       weather: 'Open-Meteo live',
-      ndvi: 'Earth Engine Sentinel-2 zone medians (committed)',
+      ndvi:
+        satNdviHits > 0
+          ? `sentinel-2-l2a STAC/COG per-block (${satNdviHits} cells)`
+          : 'Earth Engine Sentinel-2 zone medians (fallback)',
+      lst:
+        satLstHits > 0
+          ? `landsat-c2-l2 STAC/COG per-block (${satLstHits} cells)`
+          : 'EE zone LST or air+8°C fallback',
+      stacMeta: sat.sources,
       settlement: 'distance-to-center structure prior (grid:pilot adds OSM footprints)',
     },
     cells: scored,

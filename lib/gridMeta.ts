@@ -18,6 +18,14 @@ export const ICT_BBOX = {
   north: 33.80,
 } as const;
 
+/** Urban capital pilot bbox — main Islamabad sectors for STAC / signatures. */
+export const CAPITAL_PILOT_BBOX = {
+  west: 72.97,
+  south: 33.66,
+  east: 73.14,
+  north: 33.76,
+} as const;
+
 /** Include a cell if within this distance of a zone center (keeps full-city run tractable). */
 export const ZONE_INFLUENCE_M = {
   urban: 1600,

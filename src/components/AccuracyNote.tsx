@@ -24,9 +24,10 @@ export const AccuracyNote: React.FC = () => {
         <div className="px-4 pb-4 text-sm text-[var(--muted)] space-y-2 leading-relaxed border-t border-[var(--line)] pt-3">
           <p>
             <strong className="text-[var(--ink)]">Real inputs:</strong> live
-            weather (Open-Meteo temperature, humidity, rain), satellite
-            vegetation &amp; land surface heat from your Earth Engine export,
-            and terrain low-spots from a DEM depression seed.
+            weather (Open-Meteo temperature, humidity, rain); per-block
+            Sentinel-2 NDVI and Landsat surface temperature for the urban
+            capital (free STAC/COG — no Earth Engine); zone-median satellite
+            fallback elsewhere; terrain low-spots from a DEM depression seed.
           </p>
           <p>
             <strong className="text-[var(--ink)]">Not a hospital feed:</strong>{' '}
