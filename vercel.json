@@ -2,6 +2,20 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/client",
   "framework": null,
+  "headers": [
+    {
+      "source": "/grid_cells_pack.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=60, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/grid_heat.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=60, must-revalidate" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/api/dashboard", "destination": "/api/dashboard" },
     { "source": "/api/grid", "destination": "/api/grid" },

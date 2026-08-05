@@ -175,38 +175,22 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     return TEHSILS.filter((t) => present.has(t));
   }, [zones]);
 
-  // Initial load: Supabase summary → else static pack (real offline EE+weather scores)
+  // ALWAYS load static pack in the browser (Vercel serverless /api/grid often
+  // fails on the 6MB unpack). Supabase bbox is an optional fresher overlay.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       setGridStatus('loading');
       try {
-        const summaryRes = await fetch('/api/grid?summary=1');
-        if (summaryRes.ok) {
-          const summary = (await summaryRes.json()) as {
-            cellCount?: number;
-            computedAt?: string | null;
-            cellSizeM?: number;
-            source?: string;
-          };
-          if (!cancelled && (summary.cellCount ?? 0) > 0) {
-            setCellSizeM(summary.cellSizeM ?? 50);
-            setGridMeta({
-              count: summary.cellCount ?? 0,
-              computedAt: summary.computedAt ?? null,
-              source: summary.source ?? 'api',
-            });
-            setGridStatus('ready');
-            return;
-          }
-        }
-
-        const packRes = await fetch('/grid_cells_pack.json');
+        const packRes = await fetch(
+          `/grid_cells_pack.json?v=${encodeURIComponent(String(gridEpoch))}&cb=2`
+        );
         if (packRes.ok) {
           const raw = (await packRes.json()) as GridPackFile;
           const unpacked = unpackGridPack(raw);
           if (!cancelled && unpacked.cells.length) {
             setPackCells(unpacked.cells);
+            setViewCells(unpacked.cells); // draw immediately — don't wait for map/API
             setCellSizeM(unpacked.cellSizeM);
             setGridMeta({
               count: unpacked.cells.length,
@@ -214,11 +198,35 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
               source: 'static-pack',
             });
             setGridStatus('ready');
-            return;
+          } else if (!cancelled) {
+            setGridStatus('empty');
           }
+        } else if (!cancelled) {
+          setGridStatus('empty');
         }
 
-        if (!cancelled) setGridStatus('empty');
+        // Optional: prefer Supabase/API meta if populated after refresh
+        try {
+          const summaryRes = await fetch('/api/grid?summary=1');
+          if (summaryRes.ok && !cancelled) {
+            const summary = (await summaryRes.json()) as {
+              cellCount?: number;
+              computedAt?: string | null;
+              cellSizeM?: number;
+              source?: string;
+            };
+            if ((summary.cellCount ?? 0) > 0 && summary.source === 'supabase') {
+              setGridMeta({
+                count: summary.cellCount ?? 0,
+                computedAt: summary.computedAt ?? null,
+                source: 'supabase',
+              });
+              if (summary.cellSizeM) setCellSizeM(summary.cellSizeM);
+            }
+          }
+        } catch {
+          /* pack already loaded */
+        }
       } catch {
         if (!cancelled) setGridStatus('empty');
       }
@@ -228,11 +236,12 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     };
   }, [gridEpoch]);
 
-  // Viewport cells: API (Supabase) preferred; else filter local pack
+  // Viewport: thin pack to visible cells; overlay Supabase when available
   useEffect(() => {
     if (mapGrain !== 'blocks') return;
     const map = mapRef.current;
     if (!map || gridStatus === 'loading') return;
+    if (!packCells.length && !viewCells.length) return;
 
     let cancelled = false;
     const b = map.getBounds().pad(0.12);
@@ -244,40 +253,43 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     };
     const limit = map.getZoom() >= CELL_RECT_ZOOM ? 9000 : 3500;
     const bboxStr = `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
+    const zoneFilter = new Set<string>(filteredZones.map((z) => z.id));
+
+    // Instant local filter so blocks never go blank while API is slow
+    if (packCells.length) {
+      const local = cellsInView(packCells, bbox, zoneFilter);
+      const step =
+        local.length > limit ? Math.ceil(local.length / limit) : 1;
+      setViewCells(local.filter((_, i) => i % step === 0));
+    }
 
     void (async () => {
       try {
         const res = await fetch(
           `/api/grid?bbox=${encodeURIComponent(bboxStr)}&limit=${limit}`
         );
-        if (res.ok) {
-          const body = (await res.json()) as {
-            cells?: GridCellDto[];
-            computedAt?: string | null;
-            source?: string;
-            count?: number;
-          };
-          if (!cancelled && body.cells?.length) {
-            setViewCells(body.cells);
-            setGridMeta((prev) => ({
-              count: prev?.count ?? body.count ?? body.cells!.length,
-              computedAt: body.computedAt ?? prev?.computedAt ?? null,
-              source: body.source ?? prev?.source ?? 'api',
-            }));
-            return;
-          }
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          cells?: GridCellDto[];
+          computedAt?: string | null;
+          source?: string;
+          count?: number;
+        };
+        // Only replace pack with live Supabase (not flaky file-backed API)
+        if (
+          !cancelled &&
+          body.source === 'supabase' &&
+          body.cells?.length
+        ) {
+          setViewCells(body.cells);
+          setGridMeta((prev) => ({
+            count: prev?.count ?? body.count ?? body.cells!.length,
+            computedAt: body.computedAt ?? prev?.computedAt ?? null,
+            source: 'supabase',
+          }));
         }
       } catch {
-        /* fall through to pack */
-      }
-
-      if (cancelled) return;
-      if (packCells.length) {
-        const zoneFilter = new Set<string>(filteredZones.map((z) => z.id));
-        const local = cellsInView(packCells, bbox, zoneFilter);
-        const step =
-          local.length > limit ? Math.ceil(local.length / limit) : 1;
-        setViewCells(local.filter((_, i) => i % step === 0));
+        /* keep pack viewCells */
       }
     })();
 
