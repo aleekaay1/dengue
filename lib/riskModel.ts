@@ -244,7 +244,7 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
       maxContribution: max.depression,
     },
     {
-      factor: `Settlement / Structure Density (${settlePct}%)`,
+      factor: `Built-up area (${settlePct}%)`,
       impact: impactFromContribution(contrib.settlement),
       description:
         settlePct >= 40
