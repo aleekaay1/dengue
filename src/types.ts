@@ -40,6 +40,10 @@ export interface ZoneData {
   depressionAreaPct?: number;
   /** 0–100 standing-water / terrain sink risk */
   depressionRiskScore?: number;
+  /** Block-grid rollup insights (from 50 m cells) */
+  gridCellCount?: number;
+  meanSettlementDensity?: number;
+  peopleAtRisk?: number;
   pastCases: CaseHistory[];
   trend: number[]; // Last 7 days risk score history
   lastUpdated: string;

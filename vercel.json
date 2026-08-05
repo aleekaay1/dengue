@@ -4,6 +4,7 @@
   "framework": null,
   "rewrites": [
     { "source": "/api/dashboard", "destination": "/api/dashboard" },
+    { "source": "/api/grid", "destination": "/api/grid" },
     { "source": "/api/cron/refresh", "destination": "/api/cron/refresh" },
     { "source": "/api/ssr", "destination": "/api/ssr" },
     {
@@ -14,15 +15,19 @@
   "functions": {
     "api/dashboard.ts": {
       "maxDuration": 60,
-      "includeFiles": "{lib/**,src/types.ts}"
+      "includeFiles": "{lib/**,src/types.ts,data/**}"
+    },
+    "api/grid.ts": {
+      "maxDuration": 30,
+      "includeFiles": "{lib/**,data/**}"
     },
     "api/cron/refresh.ts": {
       "maxDuration": 60,
-      "includeFiles": "{lib/**,src/types.ts}"
+      "includeFiles": "{lib/**,src/types.ts,data/**}"
     },
     "api/ssr.ts": {
       "maxDuration": 60,
-      "includeFiles": "{dist/**,lib/**,src/types.ts,src/types/**}"
+      "includeFiles": "{dist/**,lib/**,src/types.ts,src/types/**,data/**}"
     }
   },
   "crons": [

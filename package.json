@@ -16,6 +16,10 @@
     "test:weather": "tsx scripts/test-weather.ts",
     "test:risk": "tsx lib/riskModel.test.ts",
     "terrain": "tsx scripts/compute-terrain.ts && node scripts/export-terrain-seed.mjs",
+    "grid:fast": "tsx scripts/compute-grid-fast.ts",
+    "grid:fast:full": "tsx scripts/compute-grid-fast.ts --full",
+    "grid:pilot": "tsx scripts/compute-grid.ts --pilot",
+    "grid:full": "tsx scripts/compute-grid.ts --full",
     "refresh": "tsx scripts/refresh-local.ts"
   },
   "dependencies": {
@@ -26,6 +30,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "geotiff": "^3.0.5",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "lucide-react": "^0.546.0",

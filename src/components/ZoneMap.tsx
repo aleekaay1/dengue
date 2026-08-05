@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
@@ -6,6 +6,12 @@ import { ZoneData, MapOverlay, AreaType } from '../types';
 import { RiskBadge } from './RiskBadge';
 import { Layers, MapPin, Maximize2, Minimize2 } from 'lucide-react';
 import { TEHSILS } from '../../lib/zoneMeta';
+import {
+  cellFillColor,
+  cellIntensity,
+  cellPopupHtml,
+  type GridCellDto,
+} from './gridMapUtils';
 
 interface ZoneMapProps {
   zones: ZoneData[];
@@ -19,65 +25,13 @@ interface ZoneMapProps {
 
 type AreaFilter = 'all' | AreaType;
 type TehsilFilter = 'all' | string;
+/** Blocks = real 50m cells; Zones = aggregated markers only */
+type MapGrain = 'blocks' | 'zones';
 
 const ISLAMABAD_CENTER: L.LatLngExpression = [33.6938, 73.0652];
-const DEFAULT_ZOOM = 11;
-
-function hash01(seed: string, salt: number): number {
-  let h = salt * 374761393;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 1103515245);
-  }
-  return ((h >>> 0) % 10000) / 10000;
-}
-
-function overlayIntensity(zone: ZoneData, overlay: MapOverlay): number {
-  if (overlay === 'vegetation') {
-    return Math.min(1, Math.max(0.05, zone.vegetationIndex));
-  }
-  if (overlay === 'cases') {
-    const recent = zone.pastCases[zone.pastCases.length - 1]?.count ?? 0;
-    return Math.min(1, Math.max(0.05, recent / 30));
-  }
-  if (overlay === 'terrain') {
-    return Math.min(1, Math.max(0.05, (zone.depressionRiskScore ?? 0) / 100));
-  }
-  return Math.min(1, Math.max(0.08, zone.riskScore / 100));
-}
-
-function buildHeatPoints(
-  zones: ZoneData[],
-  overlay: MapOverlay
-): [number, number, number][] {
-  const points: [number, number, number][] = [];
-
-  for (const zone of zones) {
-    const intensity = overlayIntensity(zone, overlay);
-    const { lat, lng } = zone.coordinates;
-    const ruralScale = zone.areaType === 'rural' ? 1.35 : 1;
-    const rings = 3 + Math.round(intensity * 4);
-
-    points.push([lat, lng, intensity]);
-
-    for (let r = 1; r <= rings; r++) {
-      const spokes = 6 + r * 2;
-      const radiusDeg = 0.006 * r * (0.7 + intensity * 0.6) * ruralScale;
-      for (let s = 0; s < spokes; s++) {
-        const jitter = (hash01(zone.id, r * 17 + s) - 0.5) * 0.004 * ruralScale;
-        const angle =
-          (s / spokes) * Math.PI * 2 + hash01(zone.id, r) * 0.4;
-        const falloff = intensity * (1 - r / (rings + 1.2));
-        points.push([
-          lat + Math.cos(angle) * radiusDeg * 0.75 + jitter * 0.5,
-          lng + Math.sin(angle) * radiusDeg + jitter,
-          Math.max(0.05, falloff),
-        ]);
-      }
-    }
-  }
-
-  return points;
-}
+const DEFAULT_ZOOM = 12;
+/** Above this zoom, draw true cell rectangles instead of heat blobs */
+const CELL_RECT_ZOOM = 14;
 
 const HEAT_GRADIENT: Record<string, string> = {
   0.15: '#1d4ed8',
@@ -114,6 +68,27 @@ function riskMarkerColor(level: ZoneData['riskLevel']): string {
   return '#4C8C6B';
 }
 
+function zoneFallbackHeat(
+  zones: ZoneData[],
+  overlay: MapOverlay
+): [number, number, number][] {
+  return zones.map((zone) => {
+    let intensity = zone.riskScore / 100;
+    if (overlay === 'vegetation') intensity = zone.vegetationIndex;
+    else if (overlay === 'terrain')
+      intensity = (zone.depressionRiskScore ?? 0) / 100;
+    else if (overlay === 'cases') {
+      const recent = zone.pastCases[zone.pastCases.length - 1]?.count ?? 0;
+      intensity = recent / 30;
+    }
+    return [
+      zone.coordinates.lat,
+      zone.coordinates.lng,
+      Math.min(1, Math.max(0.08, intensity)),
+    ];
+  });
+}
+
 export const ZoneMap: React.FC<ZoneMapProps> = ({
   zones,
   selectedZoneId,
@@ -127,13 +102,31 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
   const mapRef = useRef<L.Map | null>(null);
   const heatRef = useRef<L.HeatLayer | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
+  const cellsRef = useRef<L.LayerGroup | null>(null);
   const onSelectRef = useRef(onSelectZone);
   const fitKeyRef = useRef('');
+  const overlayRef = useRef(overlay);
+  const grainRef = useRef<MapGrain>('blocks');
+
   const [hoveredZone, setHoveredZone] = useState<ZoneData | null>(null);
   const [areaFilter, setAreaFilter] = useState<AreaFilter>('all');
   const [tehsilFilter, setTehsilFilter] = useState<TehsilFilter>('all');
+  const [mapGrain, setMapGrain] = useState<MapGrain>('blocks');
+  const [gridPoints, setGridPoints] = useState<[number, number, number][] | null>(
+    null
+  );
+  const [allGridCells, setAllGridCells] = useState<GridCellDto[]>([]);
+  const [cellSizeM, setCellSizeM] = useState(50);
+  const [gridMeta, setGridMeta] = useState<{
+    count: number;
+    computedAt: string | null;
+    pilot: boolean;
+  } | null>(null);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
   onSelectRef.current = onSelectZone;
+  overlayRef.current = overlay;
+  grainRef.current = mapGrain;
 
   const filteredZones = useMemo(() => {
     return zones.filter((z) => {
@@ -148,10 +141,138 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     return TEHSILS.filter((t) => present.has(t));
   }, [zones]);
 
-  const heatPoints = useMemo(
-    () => buildHeatPoints(filteredZones, overlay),
-    [filteredZones, overlay]
-  );
+  // Load real grid heat points (actual cell centers — no synthetic rings)
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/grid');
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          cellSizeM?: number;
+          cellCount?: number;
+          computedAt?: string | null;
+          pilot?: boolean;
+          points?: [number, number, number][];
+        };
+        if (cancelled) return;
+        setCellSizeM(data.cellSizeM ?? 50);
+        setGridMeta({
+          count: data.cellCount ?? data.points?.length ?? 0,
+          computedAt: data.computedAt ?? null,
+          pilot: Boolean(data.pilot),
+        });
+        if (data.points?.length) {
+          setGridPoints(data.points);
+        }
+        // Also pull full cell geometries for high-zoom rectangles (pilot fits in memory)
+        const bboxRes = await fetch(
+          '/api/grid?bbox=72.85,33.45,73.28,33.80&limit=20000'
+        );
+        if (bboxRes.ok) {
+          const body = (await bboxRes.json()) as { cells?: GridCellDto[] };
+          if (!cancelled && body.cells?.length) setAllGridCells(body.cells);
+        }
+      } catch {
+        /* zone fallback heat */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const heatPoints = useMemo(() => {
+    if (mapGrain === 'zones' || !gridPoints?.length) {
+      return zoneFallbackHeat(filteredZones, overlay);
+    }
+    // Re-weight intensities client-side when overlay changes using cached cells
+    if (allGridCells.length && overlay !== 'risk') {
+      const zoneFilter = new Set(filteredZones.map((z) => z.id));
+      return allGridCells
+        .filter((c) => zoneFilter.has(c.zoneId))
+        .map(
+          (c) =>
+            [c.lat, c.lng, cellIntensity(c, overlay)] as [
+              number,
+              number,
+              number,
+            ]
+        );
+    }
+    if (filteredZones.length < zones.length && allGridCells.length) {
+      const zoneFilter = new Set(filteredZones.map((z) => z.id));
+      return allGridCells
+        .filter((c) => zoneFilter.has(c.zoneId))
+        .map(
+          (c) =>
+            [c.lat, c.lng, Math.max(0.05, c.riskScore / 100)] as [
+              number,
+              number,
+              number,
+            ]
+        );
+    }
+    return gridPoints;
+  }, [
+    mapGrain,
+    gridPoints,
+    filteredZones,
+    overlay,
+    allGridCells,
+    zones.length,
+  ]);
+
+  const redrawCellRects = useCallback(() => {
+    const map = mapRef.current;
+    const group = cellsRef.current;
+    if (!map || !group) return;
+    group.clearLayers();
+
+    if (grainRef.current !== 'blocks') return;
+    if (map.getZoom() < CELL_RECT_ZOOM) return;
+    if (!allGridCells.length) return;
+
+    const bounds = map.getBounds();
+    const pad = 0.002;
+    const zoneFilter = new Set(
+      // use current filters via closure — refreshed when deps change
+      filteredZones.map((z) => z.id)
+    );
+
+    const visible = allGridCells.filter(
+      (c) =>
+        zoneFilter.has(c.zoneId) &&
+        c.lat >= bounds.getSouth() - pad &&
+        c.lat <= bounds.getNorth() + pad &&
+        c.lng >= bounds.getWest() - pad &&
+        c.lng <= bounds.getEast() + pad
+    );
+
+    // Street-level: every visible 50m rectangle is a real scored cell
+    const maxDraw = 4000;
+    const step = visible.length > maxDraw ? Math.ceil(visible.length / maxDraw) : 1;
+
+    for (let i = 0; i < visible.length; i += step) {
+      const c = visible[i];
+      const intensity = cellIntensity(c, overlayRef.current);
+      const rect = L.rectangle(
+        [
+          [c.south, c.west],
+          [c.north, c.east],
+        ],
+        {
+          color: 'transparent',
+          weight: 0,
+          fillColor: cellFillColor(intensity, overlayRef.current),
+          fillOpacity: 0.72,
+          interactive: true,
+        }
+      );
+      rect.bindPopup(cellPopupHtml(c, cellSizeM), { maxWidth: 280 });
+      group.addLayer(rect);
+    }
+  }, [allGridCells, filteredZones, cellSizeM]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -161,26 +282,49 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       zoom: DEFAULT_ZOOM,
       zoomControl: true,
       attributionControl: true,
+      maxZoom: 19,
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · block grid 50m',
     }).addTo(map);
 
     markersRef.current = L.layerGroup().addTo(map);
+    cellsRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+
+    const onZoom = () => {
+      setZoom(map.getZoom());
+      redrawCellRects();
+      // Fade heat when rectangles take over
+      if (heatRef.current) {
+        const el = (heatRef.current as unknown as { _canvas?: HTMLCanvasElement })
+          ._canvas;
+        if (el) {
+          el.style.opacity = map.getZoom() >= CELL_RECT_ZOOM ? '0.15' : '0.9';
+        }
+      }
+    };
+    map.on('zoomend moveend', onZoom);
 
     requestAnimationFrame(() => map.invalidateSize());
 
     return () => {
+      map.off('zoomend moveend', onZoom);
       map.remove();
       mapRef.current = null;
       heatRef.current = null;
       markersRef.current = null;
+      cellsRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    redrawCellRects();
+  }, [redrawCellRects, overlay, mapGrain, zoom]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -205,6 +349,10 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       heatRef.current = null;
     }
 
+    if (mapGrain === 'zones' && !gridPoints?.length) {
+      // zone-only fallback
+    }
+
     const gradient =
       overlay === 'vegetation'
         ? VEG_GRADIENT
@@ -214,17 +362,28 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
             ? TERRAIN_GRADIENT
             : HEAT_GRADIENT;
 
+    // Radius in px ≈ half a 50m cell at current zoom — heat follows real density
+    const metersPerPx =
+      (40075016.686 * Math.cos((ISLAMABAD_CENTER[0] * Math.PI) / 180)) /
+      Math.pow(2, map.getZoom() + 8);
+    const radiusPx = Math.max(6, Math.min(28, (cellSizeM / 2) / metersPerPx));
+
     const layer = L.heatLayer(heatPoints, {
-      radius: 28,
-      blur: 22,
-      maxZoom: 17,
+      radius: radiusPx,
+      blur: Math.max(4, radiusPx * 0.55),
+      maxZoom: 19,
       max: 1,
-      minOpacity: 0.35,
+      minOpacity: 0.4,
       gradient,
     });
     layer.addTo(map);
     heatRef.current = layer;
-  }, [heatPoints, overlay]);
+
+    const el = (layer as unknown as { _canvas?: HTMLCanvasElement })._canvas;
+    if (el) {
+      el.style.opacity = map.getZoom() >= CELL_RECT_ZOOM ? '0.15' : '0.9';
+    }
+  }, [heatPoints, overlay, mapGrain, cellSizeM, gridPoints?.length]);
 
   useEffect(() => {
     const group = markersRef.current;
@@ -238,16 +397,16 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       const marker = L.circleMarker(
         [zone.coordinates.lat, zone.coordinates.lng],
         {
-          radius: isSelected ? 10 : zone.areaType === 'rural' ? 8 : 7,
+          radius: isSelected ? 9 : 6,
           color: isSelected ? '#EDE6D6' : '#14291F',
-          weight: isSelected ? 3 : 2,
+          weight: isSelected ? 3 : 1.5,
           fillColor: riskMarkerColor(zone.riskLevel),
-          fillOpacity: 0.95,
+          fillOpacity: mapGrain === 'zones' ? 0.95 : 0.75,
         }
       );
 
       marker.bindTooltip(
-        `<strong>${zone.name}</strong><br/>${zone.tehsil} · ${zone.areaType}<br/>Risk ${zone.riskScore}/100`,
+        `<strong>${zone.name}</strong><br/>${zone.tehsil} · zone rollup<br/>Risk ${zone.riskScore}/100`,
         { direction: 'top', offset: [0, -8], opacity: 0.95 }
       );
 
@@ -260,20 +419,20 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       group.addLayer(marker);
     }
 
-    const fitKey = `${filteredZones.map((z) => z.id).join(',')}|${fullscreen}`;
+    const fitKey = `${filteredZones.map((z) => z.id).join(',')}|${fullscreen}|${mapGrain}`;
     if (filteredZones.length && fitKey !== fitKeyRef.current) {
       const bounds = L.latLngBounds(
         filteredZones.map(
           (z) => [z.coordinates.lat, z.coordinates.lng] as [number, number]
         )
       );
-      map.fitBounds(bounds.pad(0.25), {
+      map.fitBounds(bounds.pad(0.2), {
         animate: true,
-        maxZoom: areaFilter === 'all' && tehsilFilter === 'all' ? 12 : 13,
+        maxZoom: mapGrain === 'blocks' ? 14 : 12,
       });
       fitKeyRef.current = fitKey;
     }
-  }, [filteredZones, selectedZoneId, fullscreen, areaFilter, tehsilFilter]);
+  }, [filteredZones, selectedZoneId, fullscreen, mapGrain]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -287,7 +446,6 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     const map = mapRef.current;
     const el = containerRef.current;
     if (!map || !el) return;
-
     const ro = new ResizeObserver(() => map.invalidateSize());
     ro.observe(el);
     return () => ro.disconnect();
@@ -306,10 +464,12 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 bg-[#D9A441] rounded-full" />
           <h2 className="font-heading font-extrabold text-sm uppercase tracking-wide text-[#EDE6D6]">
-            ICT Risk Heatmap
+            ICT Block Risk Map
           </h2>
           <span className="font-mono-data text-[10px] text-[#EDE6D6]/50">
-            {filteredZones.length}/{zones.length} zones
+            {gridMeta
+              ? `${gridMeta.count} × ${cellSizeM}m cells${gridMeta.pilot ? ' (pilot)' : ''}`
+              : `${filteredZones.length} zones`}
           </span>
         </div>
 
@@ -317,14 +477,37 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           <div className="flex items-center gap-1 bg-[#14291F] p-1 rounded-xs border border-[#2D5843]">
             {(
               [
+                ['blocks', 'Blocks', 'bg-sky-700 text-white'],
+                ['zones', 'Zones', 'bg-[#D9A441] text-[#23241F]'],
+              ] as const
+            ).map(([key, label, activeClass]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setMapGrain(key)}
+                className={`px-2.5 py-1 text-xs font-heading font-bold rounded-xs transition-colors ${
+                  mapGrain === key
+                    ? activeClass
+                    : 'text-[#EDE6D6]/70 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1 bg-[#14291F] p-1 rounded-xs border border-[#2D5843]">
+            {(
+              [
                 ['risk', 'Risk', 'bg-[#D9A441] text-[#23241F]'],
                 ['vegetation', 'Canopy', 'bg-[#4C8C6B] text-white'],
-                ['cases', 'Cases', 'bg-[#B5432A] text-white'],
+                ['cases', 'People', 'bg-[#B5432A] text-white'],
                 ['terrain', 'Terrain', 'bg-sky-700 text-white'],
               ] as const
             ).map(([key, label, activeClass]) => (
               <button
                 key={key}
+                type="button"
                 onClick={() => setOverlay(key)}
                 className={`px-2.5 py-1 text-xs font-heading font-bold rounded-xs transition-colors ${
                   overlay === key
@@ -340,22 +523,21 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           <button
             type="button"
             onClick={onToggleFullscreen}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-heading font-bold uppercase bg-[#14291F] border border-[#2D5843] text-[#EDE6D6] hover:border-[#D9A441] hover:text-[#D9A441] rounded-xs"
-            title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen map'}
+            className="p-1.5 rounded-xs border border-[#2D5843] text-[#EDE6D6] hover:bg-[#14291F]"
+            aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen map'}
           >
             {fullscreen ? (
-              <Minimize2 className="w-3.5 h-3.5" />
+              <Minimize2 className="w-4 h-4" />
             ) : (
-              <Maximize2 className="w-3.5 h-3.5" />
+              <Maximize2 className="w-4 h-4" />
             )}
-            {fullscreen ? 'Exit' : 'Full'}
           </button>
         </div>
       </div>
 
-      <div className="bg-[#14291F] px-3 py-2 border-b border-[#2D5843] flex flex-wrap gap-2 items-center z-10">
-        <span className="text-[10px] font-mono-data uppercase text-[#EDE6D6]/50 mr-1">
-          District
+      <div className="px-3 py-2 bg-[#14291F] border-b border-[#2D5843] flex flex-wrap gap-2 items-center">
+        <span className="text-[10px] font-heading font-bold uppercase text-[#EDE6D6]/60">
+          Area
         </span>
         {(
           [
@@ -371,27 +553,25 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
               setAreaFilter(key);
               setTehsilFilter('all');
             }}
-            className={`px-2 py-1 text-[11px] font-heading font-bold rounded-xs border transition-colors ${
+            className={`px-2 py-0.5 text-[11px] font-heading font-bold rounded-xs border ${
               areaFilter === key
-                ? 'bg-[#D9A441] text-[#23241F] border-[#D9A441]'
-                : 'bg-[#1F3D2E] text-[#EDE6D6]/80 border-[#2D5843] hover:border-[#D9A441]/60'
+                ? 'bg-[#4C8C6B] border-[#4C8C6B] text-white'
+                : 'border-[#2D5843] text-[#EDE6D6]/70'
             }`}
           >
             {label}
           </button>
         ))}
-
-        <span className="text-[#EDE6D6]/20 mx-1">|</span>
-        <span className="text-[10px] font-mono-data uppercase text-[#EDE6D6]/50 mr-1">
+        <span className="text-[10px] font-heading font-bold uppercase text-[#EDE6D6]/60 ml-2">
           Tehsil
         </span>
         <button
           type="button"
           onClick={() => setTehsilFilter('all')}
-          className={`px-2 py-1 text-[11px] font-heading font-bold rounded-xs border ${
+          className={`px-2 py-0.5 text-[11px] font-heading font-bold rounded-xs border ${
             tehsilFilter === 'all'
-              ? 'bg-[#4C8C6B] text-white border-[#4C8C6B]'
-              : 'bg-[#1F3D2E] text-[#EDE6D6]/80 border-[#2D5843]'
+              ? 'bg-[#D9A441] border-[#D9A441] text-[#23241F]'
+              : 'border-[#2D5843] text-[#EDE6D6]/70'
           }`}
         >
           All
@@ -400,15 +580,11 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           <button
             key={t}
             type="button"
-            onClick={() => {
-              setTehsilFilter(t);
-              const sample = zones.find((z) => z.tehsil === t);
-              if (sample) setAreaFilter(sample.areaType);
-            }}
-            className={`px-2 py-1 text-[11px] font-heading font-bold rounded-xs border ${
+            onClick={() => setTehsilFilter(t)}
+            className={`px-2 py-0.5 text-[11px] font-heading font-bold rounded-xs border ${
               tehsilFilter === t
-                ? 'bg-[#4C8C6B] text-white border-[#4C8C6B]'
-                : 'bg-[#1F3D2E] text-[#EDE6D6]/80 border-[#2D5843] hover:border-[#4C8C6B]/60'
+                ? 'bg-[#D9A441] border-[#D9A441] text-[#23241F]'
+                : 'border-[#2D5843] text-[#EDE6D6]/70'
             }`}
           >
             {t}
@@ -419,19 +595,26 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       <div className={`relative flex-1 ${fullscreen ? 'min-h-0' : 'min-h-[420px]'}`}>
         <div ref={containerRef} className="absolute inset-0 z-0" />
 
-        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] shadow-lg z-[500] pointer-events-none">
+        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] shadow-lg z-[500] pointer-events-none max-w-[240px]">
           <div className="font-heading font-bold text-xs uppercase mb-1.5 border-b border-[#2D5843] pb-1 flex items-center justify-between gap-2">
             <span>
-              {overlay === 'risk'
-                ? 'Risk intensity'
-                : overlay === 'vegetation'
-                  ? 'Canopy (NDVI)'
-                  : overlay === 'terrain'
-                    ? 'Terrain (standing water)'
-                    : 'Weekly cases'}
+              {zoom >= CELL_RECT_ZOOM && mapGrain === 'blocks'
+                ? `${cellSizeM}m block cells`
+                : overlay === 'risk'
+                  ? 'Block risk heat'
+                  : overlay === 'vegetation'
+                    ? 'Canopy (NDVI)'
+                    : overlay === 'terrain'
+                      ? 'Terrain sinks'
+                      : 'People-at-risk'}
             </span>
             <Layers className="w-3 h-3 text-[#D9A441]" />
           </div>
+          <p className="text-[10px] text-[#EDE6D6]/70 mb-1.5 leading-snug">
+            {zoom >= CELL_RECT_ZOOM && mapGrain === 'blocks'
+              ? 'Zoomed in: each rectangle is a scored grid cell (click for factors). Not household-level.'
+              : 'Zoom in (z14+) for sharp block rectangles instead of heat clouds.'}
+          </p>
           <div
             className={`h-2 w-36 rounded-xs mb-1.5 bg-gradient-to-r ${
               overlay === 'vegetation'
@@ -462,7 +645,7 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
               />
             </div>
             <div className="text-[10px] font-mono-data text-[#D9A441] mb-1.5 uppercase">
-              {hoveredZone.district} · {hoveredZone.tehsil}
+              Zone rollup · {hoveredZone.tehsil}
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono-data text-[11px]">
               <div>
@@ -478,10 +661,6 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
                 {hoveredZone.vegetationIndex}
               </div>
               <div>
-                <span className="text-[#EDE6D6]/50">Rain </span>
-                {hoveredZone.rainfallRecent}mm
-              </div>
-              <div className="col-span-2">
                 <span className="text-[#EDE6D6]/50">Terrain </span>
                 {hoveredZone.depressionRiskScore ?? 0}/100
               </div>
@@ -493,7 +672,12 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       <div className="bg-[#1F3D2E] px-3 py-2 border-t border-[#2D5843] text-xs font-mono-data text-[#EDE6D6]/70 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <MapPin className="w-3.5 h-3.5 text-[#D9A441]" />
-          <span>OpenStreetMap · urban + rural ICT</span>
+          <span>
+            Real 50m blocks · OSM + DEM + weather
+            {gridMeta?.computedAt
+              ? ` · grid ${gridMeta.computedAt.slice(0, 10)}`
+              : ''}
+          </span>
         </div>
         <div>
           Selected:{' '}

@@ -92,16 +92,16 @@ export const MethodologyPage: React.FC = () => {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs font-mono-data">
           <div className="bg-white p-3 rounded-xs border-t-3 border-[#D9A441] border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Temperature (22%)
+              Temperature (20%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Peaks near 28.5°C (26–32°C window). Outside the band the factor still adds points, but fewer than its max.
+              Peaks near 28.5°C (26–32°C window). Block grid uses Open-Meteo ambient (coarse); Landsat LST when wired.
             </p>
           </div>
 
           <div className="bg-white p-3 rounded-xs border-t-3 border-sky-500 border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Humidity (22%)
+              Humidity (20%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
               Adult survival rises above ~60% RH; high humidity can outweigh cooler temperatures in monsoon conditions.
@@ -110,41 +110,47 @@ export const MethodologyPage: React.FC = () => {
 
           <div className="bg-white p-3 rounded-xs border-t-3 border-[#4C8C6B] border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Vegetation / Shade (18%)
+              Vegetation / Shade (16%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Sentinel-2 NDVI approximates canopy resting habitat for daytime adult mosquitoes.
+              Sentinel-2 NDVI (10 m native, aggregated to 50 m blocks) for canopy resting habitat.
             </p>
           </div>
 
           <div className="bg-white p-3 rounded-xs border-t-3 border-[#B5432A] border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Case history (18%)
+              Case history (15%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Recent weekly cases as a transmission-reservoir proxy (demo counts until a live ICT feed is wired).
+              Zone-level only (no block case feed). Applied on zone rollups, not invented per cell.
             </p>
           </div>
 
           <div className="bg-white p-3 rounded-xs border-t-3 border-blue-600 border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Rainfall ~48h (9%)
+              Rainfall ~48h (8%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Recent rain increases container breeding opportunity; capped so extreme storms do not dominate the score.
+              Open-Meteo / GPM-scale (~9–11 km). Nearby 50 m cells correctly share the same rain value.
             </p>
           </div>
 
           <div className="bg-white p-3 rounded-xs border-t-3 border-sky-800 border border-[#DDD3C1]">
             <div className="font-heading font-bold text-xs text-[#1F3D2E] uppercase mb-1">
-              Terrain / Standing Water (11%)
+              Terrain + Settlement (21%)
             </div>
             <p className="text-[11px] font-sans text-[#5C5E54] leading-normal">
-              Structural DEM depression score — natural sinks that trap rainwater. Independent of today&apos;s weather;
-              refreshed rarely (not the daily cron).
+              DEM sinks (11%) + OSM structure density (10%). Block-level only — never household IDs.
             </p>
           </div>
         </div>
+
+        <p className="text-[11px] text-[#5C5E54] leading-relaxed border border-[#DDD3C1] bg-white p-3 rounded-xs">
+          <strong className="text-[#1F3D2E]">Block-level grid (50 m):</strong> Risk is scored per grid cell across
+          monitored ICT, then rolled up to zones. The map draws true cell rectangles when you zoom in — not decorative
+          circles. This is block / street-block scale, <strong>not</strong> household surveillance. Settlement density
+          counts building footprints in a cell as a structure-density proxy.
+        </p>
 
         <p className="text-[11px] text-[#5C5E54] leading-relaxed border border-[#DDD3C1] bg-white p-3 rounded-xs">
           <strong className="text-[#1F3D2E]">Standing water / terrain:</strong> Some areas have natural low points in
@@ -155,10 +161,8 @@ export const MethodologyPage: React.FC = () => {
         </p>
 
         <p className="text-[11px] text-[#5C5E54] leading-relaxed border border-[#DDD3C1] bg-white p-3 rounded-xs">
-          <strong className="text-[#1F3D2E]">Committee note:</strong> If asked why humidity can outrank case history
-          on a given day — the model is designed so near-saturating RH (weight 22%) can contribute more points than
-          a moderate case series (weight 18%) when environmental conditions are highly favorable. That is an explicit
-          design choice for an adult-biting activity signal, not a claim of causal outbreak forecasting.
+          <strong className="text-[#1F3D2E]">Refresh cadences:</strong> weather/rain daily · NDVI ~weekly · DEM + OSM
+          settlement quarterly. Block scoring runs as an offline batch, not on page load.
         </p>
       </div>
 

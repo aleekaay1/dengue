@@ -8,7 +8,7 @@
 export const TERRAIN_DEPRESSIONS_SEED = {
   "note": "Structural terrain depression metrics. Refresh quarterly or after major earthworks — not daily.",
   "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-  "computedAt": "2026-08-03T19:36:39.461Z",
+  "computedAt": "2026-08-03T20:00:22.432Z",
   "depthThresholdM": 0.25,
   "zones": [
     {
@@ -21,7 +21,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 626,
       "elevMean": 591.3,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:33:15.256Z"
+      "computedAt": "2026-08-03T19:48:53.822Z"
     },
     {
       "zoneId": "zone-f7",
@@ -33,7 +33,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 597,
       "elevMean": 575.9,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:33:20.581Z"
+      "computedAt": "2026-08-03T19:48:59.127Z"
     },
     {
       "zoneId": "zone-bluearea",
@@ -45,7 +45,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 581,
       "elevMean": 564.4,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:33:25.914Z"
+      "computedAt": "2026-08-03T19:49:04.440Z"
     },
     {
       "zoneId": "zone-f8",
@@ -57,7 +57,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 582,
       "elevMean": 564.9,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:33:31.236Z"
+      "computedAt": "2026-08-03T19:49:09.759Z"
     },
     {
       "zoneId": "zone-g6",
@@ -69,7 +69,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 570,
       "elevMean": 549,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:33:36.564Z"
+      "computedAt": "2026-08-03T19:49:15.069Z"
     },
     {
       "zoneId": "zone-diplomatic",
@@ -81,7 +81,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 602,
       "elevMean": 569.6,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:34:28.086Z"
+      "computedAt": "2026-08-03T19:49:20.403Z"
     },
     {
       "zoneId": "zone-g9",
@@ -93,7 +93,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 555,
       "elevMean": 542.5,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:34:33.416Z"
+      "computedAt": "2026-08-03T19:49:25.714Z"
     },
     {
       "zoneId": "zone-f10",
@@ -105,7 +105,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 569,
       "elevMean": 554.4,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:34:38.752Z"
+      "computedAt": "2026-08-03T19:49:31.027Z"
     },
     {
       "zoneId": "zone-g11",
@@ -117,7 +117,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 584,
       "elevMean": 567.7,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:34:44.070Z"
+      "computedAt": "2026-08-03T19:50:22.515Z"
     },
     {
       "zoneId": "zone-i8",
@@ -129,7 +129,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 522,
       "elevMean": 514,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:34:49.384Z"
+      "computedAt": "2026-08-03T19:50:28.029Z"
     },
     {
       "zoneId": "zone-bharakahu",
@@ -141,7 +141,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 654,
       "elevMean": 588.8,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:35:10.345Z"
+      "computedAt": "2026-08-03T19:50:33.349Z"
     },
     {
       "zoneId": "zone-banigala",
@@ -153,7 +153,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 722,
       "elevMean": 628,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:35:15.675Z"
+      "computedAt": "2026-08-03T19:50:38.686Z"
     },
     {
       "zoneId": "zone-nilore",
@@ -165,7 +165,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 513,
       "elevMean": 498.9,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:35:20.984Z"
+      "computedAt": "2026-08-03T19:50:44.033Z"
     },
     {
       "zoneId": "zone-chirah",
@@ -177,7 +177,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 553,
       "elevMean": 529,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:35:26.305Z"
+      "computedAt": "2026-08-03T19:51:36.091Z"
     },
     {
       "zoneId": "zone-tarnol",
@@ -189,7 +189,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 609,
       "elevMean": 591.4,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:35:31.895Z"
+      "computedAt": "2026-08-03T19:51:41.401Z"
     },
     {
       "zoneId": "zone-golra",
@@ -201,7 +201,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 600,
       "elevMean": 580,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:36:23.434Z"
+      "computedAt": "2026-08-03T19:51:46.711Z"
     },
     {
       "zoneId": "zone-sihala",
@@ -213,7 +213,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 483,
       "elevMean": 465.9,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:36:28.760Z"
+      "computedAt": "2026-08-03T19:51:52.025Z"
     },
     {
       "zoneId": "zone-rawat",
@@ -225,7 +225,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 585,
       "elevMean": 567.6,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:36:34.065Z"
+      "computedAt": "2026-08-03T20:00:17.115Z"
     },
     {
       "zoneId": "zone-koral",
@@ -237,13 +237,7 @@ export const TERRAIN_DEPRESSIONS_SEED = {
       "elevMax": 499,
       "elevMean": 458.7,
       "demSource": "Open-Meteo elevation DEM (~90m) + Priority-Flood fill",
-      "computedAt": "2026-08-03T19:36:39.460Z"
+      "computedAt": "2026-08-03T20:00:22.429Z"
     }
-  ],
-  "scoreCalibration": {
-    "depthFullM": 0.45,
-    "areaFullPct": 18,
-    "weightDepth": 0.55,
-    "weightArea": 0.45
-  }
+  ]
 } as const;

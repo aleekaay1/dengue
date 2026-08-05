@@ -24,13 +24,15 @@ export const RISK_THRESHOLDS = {
  * made for a ~10% structural terrain term (standing-water / depression risk).
  */
 export const RISK_WEIGHTS = {
-  temperature: 0.22,
-  humidity: 0.22,
-  vegetation: 0.18,
-  rainfall: 0.09,
-  recentCases: 0.18,
+  temperature: 0.2,
+  humidity: 0.2,
+  vegetation: 0.16,
+  rainfall: 0.08,
+  recentCases: 0.15,
   /** Structural — natural depressions that trap rainwater after rain */
   depression: 0.11,
+  /** Settlement / structure density (OSM footprints) — not household IDs */
+  settlement: 0.1,
 } as const;
 
 export interface RiskModelInput {
@@ -41,6 +43,8 @@ export interface RiskModelInput {
   pastCases: CaseHistory[];
   /** 0–100 structural depression score (optional; defaults to 0) */
   depressionRiskScore?: number;
+  /** 0–1 settlement/structure density (optional) */
+  settlementDensity?: number;
   zoneName?: string;
 }
 
@@ -55,6 +59,7 @@ export interface RiskModelOutput {
     rainfall: number;
     recentCases: number;
     depression: number;
+    settlement: number;
   };
 }
 
@@ -117,6 +122,11 @@ function maxPts(weight: number): number {
 /**
  * Calculate mosquito activity risk score from environmental + case + terrain inputs.
  */
+function normalizeSettlement(density: number | undefined): number {
+  if (density == null || Number.isNaN(density)) return 0;
+  return clamp(density, 0, 1);
+}
+
 export function calculateRisk(input: RiskModelInput): RiskModelOutput {
   const t = normalizeTemperature(input.temperature);
   const h = normalizeHumidity(input.humidity);
@@ -124,6 +134,7 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
   const r = normalizeRainfall(input.rainfallRecent);
   const c = normalizeRecentCases(input.pastCases);
   const d = normalizeDepression(input.depressionRiskScore);
+  const s = normalizeSettlement(input.settlementDensity);
 
   const components = {
     temperature: t,
@@ -132,6 +143,7 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     rainfall: r,
     recentCases: c,
     depression: d,
+    settlement: s,
   };
 
   const raw =
@@ -140,7 +152,8 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     v * RISK_WEIGHTS.vegetation +
     r * RISK_WEIGHTS.rainfall +
     c * RISK_WEIGHTS.recentCases +
-    d * RISK_WEIGHTS.depression;
+    d * RISK_WEIGHTS.depression +
+    s * RISK_WEIGHTS.settlement;
 
   const riskScore = Math.round(clamp(raw * 100, 0, 100));
   const riskLevel = scoreToRiskLevel(riskScore);
@@ -152,6 +165,7 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     rainfall: Math.round(r * RISK_WEIGHTS.rainfall * 100),
     recentCases: Math.round(c * RISK_WEIGHTS.recentCases * 100),
     depression: Math.round(d * RISK_WEIGHTS.depression * 100),
+    settlement: Math.round(s * RISK_WEIGHTS.settlement * 100),
   };
 
   const max = {
@@ -161,11 +175,13 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
     rainfall: maxPts(RISK_WEIGHTS.rainfall),
     recentCases: maxPts(RISK_WEIGHTS.recentCases),
     depression: maxPts(RISK_WEIGHTS.depression),
+    settlement: maxPts(RISK_WEIGHTS.settlement),
   };
 
   const lastWeekCases = input.pastCases.at(-1)?.count ?? 0;
   const inTempPeak = input.temperature >= 26 && input.temperature <= 32;
   const depScore = Math.round(clamp(input.depressionRiskScore ?? 0, 0, 100));
+  const settlePct = Math.round(clamp(input.settlementDensity ?? 0, 0, 1) * 100);
 
   const contributingFactors: ContributingFactor[] = [
     {
@@ -226,6 +242,16 @@ export function calculateRisk(input: RiskModelInput): RiskModelOutput {
           : `Limited natural depression / sink area (depression score: ${depScore}/100) — structural terrain factor, not today's weather. Adds ${contrib.depression} of ${max.depression} possible points.`,
       scoreContribution: contrib.depression,
       maxContribution: max.depression,
+    },
+    {
+      factor: `Settlement / Structure Density (${settlePct}%)`,
+      impact: impactFromContribution(contrib.settlement),
+      description:
+        settlePct >= 40
+          ? `Higher structure density increases water-storage and human-host opportunity at block scale (not household IDs) — ${contrib.settlement} of ${max.settlement} possible points.`
+          : `Lower structure density at this block — ${contrib.settlement} of ${max.settlement} possible points.`,
+      scoreContribution: contrib.settlement,
+      maxContribution: max.settlement,
     },
   ]
     .filter((f) => f.scoreContribution > 0)

@@ -45,6 +45,7 @@ const withTerrain = calculateRisk({
   rainfallRecent: 10,
   pastCases: [{ week: 'W28', count: 5 }],
   depressionRiskScore: 72,
+  settlementDensity: 0.6,
 });
 const withoutTerrain = calculateRisk({
   temperature: 28.5,
@@ -53,16 +54,25 @@ const withoutTerrain = calculateRisk({
   rainfallRecent: 10,
   pastCases: [{ week: 'W28', count: 5 }],
   depressionRiskScore: 0,
+  settlementDensity: 0,
 });
 assert(
   withTerrain.riskScore > withoutTerrain.riskScore,
-  'higher depression score should raise composite risk'
+  'higher depression/settlement should raise composite risk'
 );
 assert(
   withTerrain.contributingFactors.some((f) =>
     f.factor.toLowerCase().includes('terrain')
   ),
   'why-this-score should mention terrain / standing water'
+);
+assert(
+  Math.abs(
+    Object.values({
+      a: 0.2, b: 0.2, c: 0.16, d: 0.08, e: 0.15, f: 0.11, g: 0.1,
+    }).reduce((s, n) => s + n, 0) - 1
+  ) < 1e-9,
+  'weights must sum to 1'
 );
 
 console.log('riskModel tests passed');

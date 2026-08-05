@@ -7,7 +7,11 @@ import { fetchWeatherForZones, type WeatherReading } from './api/weather.js';
 import { fetchVegetationForZones } from './api/vegetation.js';
 import { fetchDengueCases, isDengueDataStale } from './api/dengueCases.js';
 import { loadTerrainDepressions } from './api/terrain.js';
-import { calculateRisk, defaultPrecautions } from './riskModel.js';
+import {
+  aggregateZonesFromGrid,
+  loadGridCells,
+} from './api/gridCells.js';
+import { calculateRisk, defaultPrecautions, scoreToRiskLevel } from './riskModel.js';
 import { ZONE_META } from './zoneMeta.js';
 import type { CityConditions, ZoneData } from '../src/types.js';
 
@@ -65,6 +69,9 @@ export async function buildDashboard(options?: {
 
   // Structural DEM depressions — rare batch seed, NOT fetched with daily weather/NDVI
   const terrain = loadTerrainDepressions();
+  // Block grid (offline batch) — zone scores prefer mean of contained cells when present
+  const grid = loadGridCells();
+  const gridAgg = aggregateZonesFromGrid(grid.cells);
 
   const zones: ZoneData[] = [];
   const weatherDates: string[] = [];
@@ -75,6 +82,7 @@ export async function buildDashboard(options?: {
     const v = vegetation.readings[meta.id];
     const cases = dengue.byZone[meta.id];
     const terr = terrain.byZone[meta.id];
+    const g = gridAgg.get(meta.id);
 
     if (!w || !v || !cases) {
       // Skip incomplete zones rather than crash — surfaced via freshness.errors
@@ -85,16 +93,22 @@ export async function buildDashboard(options?: {
     if (w.isLagged) anyWeatherLagged = true;
 
     const depressionRiskScore = terr?.depressionRiskScore ?? 0;
+    const settlementDensity = g?.meanSettlement;
 
     const risk = calculateRisk({
       temperature: w.temperature,
       humidity: w.humidity,
-      vegetationIndex: v.vegetationIndex,
+      vegetationIndex: g?.meanNdvi ?? v.vegetationIndex,
       rainfallRecent: w.rainfallRecent,
       pastCases: cases.pastCases,
       depressionRiskScore,
+      settlementDensity,
       zoneName: meta.name,
     });
+
+    // Prefer grid mean risk when this zone has block cells (finer spatial truth)
+    const riskScore = g ? Math.round(0.7 * g.meanRisk + 0.3 * risk.riskScore) : risk.riskScore;
+    const riskLevel = scoreToRiskLevel(riskScore);
 
     const lastUpdated = w.isLagged
       ? `${formatPkt(w.asOfDate)} (Open-Meteo hourly fallback)`
@@ -109,16 +123,19 @@ export async function buildDashboard(options?: {
       coordinates: meta.coordinates,
       svgPolygonPath: meta.svgPolygonPath,
       svgLabelCoord: meta.svgLabelCoord,
-      riskLevel: risk.riskLevel,
-      riskScore: risk.riskScore,
+      riskLevel,
+      riskScore,
       temperature: w.temperature,
       humidity: w.humidity,
       rainfallRecent: w.rainfallRecent,
-      vegetationIndex: v.vegetationIndex,
+      vegetationIndex: g?.meanNdvi ?? v.vegetationIndex,
       shadeCoverage: v.shadeCoverage,
       depressionDepthAvg: terr?.depressionDepthAvg,
       depressionAreaPct: terr?.depressionAreaPct,
       depressionRiskScore,
+      gridCellCount: g?.cellCount,
+      meanSettlementDensity: g?.meanSettlement,
+      peopleAtRisk: g?.totalPeopleAtRisk,
       pastCases: cases.pastCases,
       // Placeholder trend until we accumulate daily_readings history
       trend: [

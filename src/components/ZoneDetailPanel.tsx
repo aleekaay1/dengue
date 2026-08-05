@@ -183,6 +183,36 @@ Islamabad / ICT Health Vector Intelligence System`;
           </div>
         </div>
 
+        {zone.gridCellCount != null && zone.gridCellCount > 0 && (
+          <div className="bg-white border border-[#DDD3C1] p-3 rounded-xs shadow-xs">
+            <h3 className="font-heading font-extrabold text-xs uppercase tracking-wider text-[#1F3D2E] mb-2">
+              Block-grid insights (50 m cells)
+            </h3>
+            <div className="grid grid-cols-3 gap-2 font-mono-data text-[11px]">
+              <div>
+                <div className="text-[10px] text-[#5C5E54]">Cells</div>
+                <div className="font-bold text-[#23241F]">{zone.gridCellCount}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[#5C5E54]">Settlement dens.</div>
+                <div className="font-bold text-[#23241F]">
+                  {Math.round((zone.meanSettlementDensity ?? 0) * 100)}%
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[#5C5E54]">People-at-risk Σ</div>
+                <div className="font-bold text-[#23241F]">
+                  {zone.peopleAtRisk ?? 0}
+                </div>
+              </div>
+            </div>
+            <p className="text-[10px] text-[#5C5E54] mt-2 leading-snug">
+              Zone score is rolled up from real block cells (DEM + weather + OSM structures + NDVI).
+              Click map blocks for cell-level factors. Not household-level.
+            </p>
+          </div>
+        )}
+
         {/* SECTION: WHY THIS SCORE (Contributing Factors) */}
         <div className="bg-white border border-[#DDD3C1] p-3 rounded-xs shadow-xs">
           <h3 className="font-heading font-extrabold text-xs uppercase tracking-wider text-[#1F3D2E] flex items-center gap-1.5 mb-2.5">
