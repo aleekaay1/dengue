@@ -6,7 +6,7 @@ import { ConditionsStrip } from './components/ConditionsStrip';
 import { ZoneMapLazy } from './components/ZoneMapLazy';
 import { ZoneDetailPanel } from './components/ZoneDetailPanel';
 import { BlockDetailPanel } from './components/BlockDetailPanel';
-import { IctSignaturesMap } from './components/IctSignaturesMap';
+import { IctSignaturesMapLazy } from './components/IctSignaturesMapLazy';
 import { CityRiskOverview } from './components/CityRiskOverview';
 import { MethodologyPage } from './components/MethodologyPage';
 import { AdminDataView } from './components/AdminDataView';
@@ -324,7 +324,7 @@ export default function App({ initialData = null }: AppProps) {
         )}
 
         {activeTab === 'signatures' && (
-          <IctSignaturesMap gridEpoch={gridEpoch} />
+          <IctSignaturesMapLazy gridEpoch={gridEpoch} />
         )}
 
         {activeTab === 'overview' && (
