@@ -17,15 +17,12 @@
     }
   ],
   "rewrites": [
+    { "source": "/", "destination": "/api/ssr" },
     { "source": "/api/dashboard", "destination": "/api/dashboard" },
     { "source": "/api/grid", "destination": "/api/grid" },
     { "source": "/api/grid-refresh", "destination": "/api/grid-refresh" },
     { "source": "/api/cron/refresh", "destination": "/api/cron/refresh" },
-    { "source": "/api/ssr", "destination": "/api/ssr" },
-    {
-      "source": "/:path*",
-      "destination": "/api/ssr"
-    }
+    { "source": "/(.*)", "destination": "/api/ssr" }
   ],
   "functions": {
     "api/dashboard.ts": {
