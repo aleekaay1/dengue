@@ -55,8 +55,17 @@ export const BlockDetailPanel: React.FC<BlockDetailPanelProps> = ({
           <div className="text-right font-mono-data text-[10px] text-[#5C5E54]">
             <div className="flex items-center gap-1 justify-end">
               <MapPin className="w-3 h-3" />
-              {cell.lat.toFixed(4)}, {cell.lng.toFixed(4)}
+              {cell.lat.toFixed(5)}, {cell.lng.toFixed(5)}
             </div>
+            <a
+              className="text-[#1F3D2E] underline underline-offset-2 mt-0.5 inline-block"
+              href={`https://www.google.com/maps?q=${cell.lat},${cell.lng}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open block center
+            </a>
+            <div className="text-[9px] mt-0.5 opacity-80">WGS84 tile center</div>
           </div>
         </div>
 

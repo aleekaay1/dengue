@@ -201,12 +201,24 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       visible = visible.filter((c) => c.riskScore >= 42);
     }
 
-    const maxDraw = z >= 13 ? 900 : z >= 12 ? 550 : 320;
-    const step =
-      visible.length > maxDraw ? Math.ceil(visible.length / maxDraw) : 1;
+    // Prefer whole tiles (no step-thinning) so the fishnet stays seamless;
+    // only thin by risk when very zoomed out.
+    let draw = visible;
+    if (z < 12 && draw.length > 400) {
+      draw = draw.filter((c) => c.riskScore >= 48);
+    }
+    if (draw.length > 800) {
+      // Spatial thin by cellId hash — keeps a regular lattice, avoids overlap densify
+      draw = draw.filter((c) => {
+        let h = 0;
+        for (let i = 0; i < c.cellId.length; i++) h = (h + c.cellId.charCodeAt(i) * (i + 1)) % 5;
+        return h === 0 || h === 1 || h === 2; // keep ~60%
+      });
+    }
 
-    for (let i = 0; i < visible.length; i += step) {
-      const c = visible[i];
+    let selectedLayer: L.Rectangle | null = null;
+
+    for (const c of draw) {
       const intensity = cellIntensity(c, overlayRef.current);
       const fill = cellFillColor(intensity, overlayRef.current);
       const selected = c.cellId === selectedBlockRef.current;
@@ -216,10 +228,11 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           [c.north, c.east],
         ],
         {
-          color: selected ? '#D9A441' : 'rgba(20,30,20,0.25)',
-          weight: selected ? 2 : 0.4,
-          fillColor: fill,
-          fillOpacity: selected ? 0.55 : 0.32,
+          color: selected ? '#14532d' : 'rgba(20,40,20,0.35)',
+          weight: selected ? 3 : 0.6,
+          fillColor: selected ? '#22c55e' : fill,
+          // Uniform opacity — overlaps caused dark patches before (now tiles don't overlap)
+          fillOpacity: selected ? 0.72 : 0.3,
           interactive: true,
         }
       );
@@ -228,7 +241,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         onSelectBlockRef.current(c);
       });
       group.addLayer(rect);
+      if (selected) selectedLayer = rect;
     }
+    selectedLayer?.bringToFront();
   }, [displayBlocks, filteredZones]);
 
   useEffect(() => {

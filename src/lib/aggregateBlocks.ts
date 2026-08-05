@@ -1,7 +1,7 @@
 /**
- * Display aggregation: merge 50 m source cells into ~200 m blocks so the map
- * stays readable. Bounds stay on real lat/lng (not zone blobs).
- * Filters out empty / water-like cells (low settlement + low risk).
+ * Display aggregation: merge 50 m source cells into a non-overlapping ~200 m
+ * fishnet. Each block uses snap-grid bounds (not min/max of members) so tiles
+ * never overlap — overlapping fills were causing dark/light patches.
  */
 
 import type { GridCellDto } from '../components/gridMapUtils';
@@ -9,50 +9,66 @@ import type { GridCellDto } from '../components/gridMapUtils';
 /** Display block size in metres (source pack is 50 m). */
 export const DISPLAY_BLOCK_M = 200;
 
+/** Fixed reference latitude for ICT so lng degrees/metre stay consistent. */
+const ICT_REF_LAT = 33.70;
+
 function riskLevel(score: number): 'low' | 'medium' | 'high' {
   if (score >= 70) return 'high';
   if (score >= 40) return 'medium';
   return 'low';
 }
 
+export function displayGridStep(blockM = DISPLAY_BLOCK_M): {
+  degLat: number;
+  degLng: number;
+} {
+  const degLat = blockM / 111_320;
+  const degLng =
+    blockM / (111_320 * Math.cos((ICT_REF_LAT * Math.PI) / 180));
+  return { degLat, degLng };
+}
+
 /** Keep cells that look settled or already elevated risk — drop river/empty fringe. */
 export function isDisplayWorthy(c: GridCellDto): boolean {
   if (c.settlementDensity < 0.14 && c.ndvi > 0.42 && c.riskScore < 50) {
-    return false; // canopy / water fringe
+    return false;
   }
   if (c.settlementDensity < 0.16 && c.riskScore < 42) return false;
   return true;
 }
 
 /**
- * Snap fine cells into larger rectangles keyed by geographic grid.
- * Center lat/lng and west/south/east/north are exact from member geometry.
+ * Snap fine cells into a regular fishnet. Bounds = exact tile edges (WGS84).
+ * Center lat/lng = geometric center of that tile (pasteable into Google Maps).
  */
 export function aggregateToDisplayBlocks(
   cells: GridCellDto[],
   blockM = DISPLAY_BLOCK_M
 ): GridCellDto[] {
-  const degLat = blockM / 111_320;
-  const buckets = new Map<string, GridCellDto[]>();
+  const { degLat, degLng } = displayGridStep(blockM);
+  const buckets = new Map<string, { r: number; k: number; members: GridCellDto[] }>();
 
   for (const c of cells) {
     if (!isDisplayWorthy(c)) continue;
-    const degLng =
-      blockM / (111_320 * Math.cos((c.lat * Math.PI) / 180));
+    // Bucket by cell center so assignment is stable
     const r = Math.floor(c.lat / degLat);
     const k = Math.floor(c.lng / degLng);
     const key = `${r}_${k}`;
-    const list = buckets.get(key);
-    if (list) list.push(c);
-    else buckets.set(key, [c]);
+    const cur = buckets.get(key);
+    if (cur) cur.members.push(c);
+    else buckets.set(key, { r, k, members: [c] });
   }
 
   const out: GridCellDto[] = [];
-  for (const [key, members] of buckets) {
-    let west = Infinity;
-    let south = Infinity;
-    let east = -Infinity;
-    let north = -Infinity;
+  for (const [key, { r, k, members }] of buckets) {
+    // Exact non-overlapping tile (do NOT union member extents)
+    const south = r * degLat;
+    const north = (r + 1) * degLat;
+    const west = k * degLng;
+    const east = (k + 1) * degLng;
+    const lat = (south + north) / 2;
+    const lng = (west + east) / 2;
+
     let sumRisk = 0;
     let sumNdvi = 0;
     let sumSettle = 0;
@@ -66,10 +82,6 @@ export function aggregateToDisplayBlocks(
     const zoneCounts = new Map<string, number>();
 
     for (const m of members) {
-      west = Math.min(west, m.west);
-      south = Math.min(south, m.south);
-      east = Math.max(east, m.east);
-      north = Math.max(north, m.north);
       sumRisk += m.riskScore;
       maxRisk = Math.max(maxRisk, m.riskScore);
       sumNdvi += m.ndvi;
@@ -84,7 +96,6 @@ export function aggregateToDisplayBlocks(
     }
 
     const n = members.length;
-    // Blend mean + max so hotspots stay visible after merge
     const score = Math.round(
       Math.min(100, Math.max(0, maxRisk * 0.55 + (sumRisk / n) * 0.45))
     );
@@ -97,19 +108,17 @@ export function aggregateToDisplayBlocks(
       }
     }
     const tehsil = members.find((m) => m.zoneId === zoneId)?.tehsil ?? '';
-    const lat = (south + north) / 2;
-    const lng = (west + east) / 2;
     const settle = sumSettle / n;
     const population = Math.round(sumPop / n);
 
     out.push({
       cellId: `blk_${blockM}m_${key}`,
-      lat: Math.round(lat * 1e6) / 1e6,
-      lng: Math.round(lng * 1e6) / 1e6,
-      west: Math.round(west * 1e6) / 1e6,
-      south: Math.round(south * 1e6) / 1e6,
-      east: Math.round(east * 1e6) / 1e6,
-      north: Math.round(north * 1e6) / 1e6,
+      lat: Math.round(lat * 1e7) / 1e7,
+      lng: Math.round(lng * 1e7) / 1e7,
+      west: Math.round(west * 1e7) / 1e7,
+      south: Math.round(south * 1e7) / 1e7,
+      east: Math.round(east * 1e7) / 1e7,
+      north: Math.round(north * 1e7) / 1e7,
       zoneId,
       tehsil,
       ndvi: Math.round((sumNdvi / n) * 100) / 100,
