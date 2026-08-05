@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import type { ZoneData, MapOverlay } from '../types';
+import type { GridCellDto } from './gridMapUtils';
 
 interface ZoneMapLazyProps {
   zones: ZoneData[];
   selectedZoneId: string | null;
   onSelectZone: (zone: ZoneData) => void;
+  selectedBlockId: string | null;
+  onSelectBlock: (cell: GridCellDto | null) => void;
   overlay: MapOverlay;
   setOverlay: (overlay: MapOverlay) => void;
   fullscreen: boolean;
@@ -30,13 +33,10 @@ export const ZoneMapLazy: React.FC<ZoneMapLazyProps> = (props) => {
 
   if (!Map) {
     return (
-      <div className="bg-[#14291F] border-2 border-[#2D5843] rounded-xs min-h-[520px] flex flex-col items-center justify-center text-[#EDE6D6] gap-2">
+      <div className="bg-[#14291F] border-2 border-[#2D5843] rounded-xs min-h-[480px] h-[min(70vh,640px)] flex flex-col items-center justify-center text-[#EDE6D6] gap-2">
         <div className="w-2.5 h-2.5 bg-[#D9A441] rounded-full animate-pulse" />
         <p className="font-heading font-bold text-sm uppercase tracking-wide">
           Loading ICT risk map…
-        </p>
-        <p className="font-mono-data text-[11px] text-[#EDE6D6]/60">
-          {props.zones.length} zones ready · OpenStreetMap hydrates in browser
         </p>
       </div>
     );

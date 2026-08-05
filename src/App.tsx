@@ -5,11 +5,15 @@ import { Header } from './components/Header';
 import { ConditionsStrip } from './components/ConditionsStrip';
 import { ZoneMapLazy } from './components/ZoneMapLazy';
 import { ZoneDetailPanel } from './components/ZoneDetailPanel';
+import { BlockDetailPanel } from './components/BlockDetailPanel';
+import { IctSignaturesMap } from './components/IctSignaturesMap';
 import { CityRiskOverview } from './components/CityRiskOverview';
 import { MethodologyPage } from './components/MethodologyPage';
 import { AdminDataView } from './components/AdminDataView';
 import { CrawlerDataBlock } from './components/CrawlerDataBlock';
 import { useDashboardData } from './hooks/useDashboardData';
+import type { GridCellDto } from './components/gridMapUtils';
+import { DISPLAY_BLOCK_M } from './lib/aggregateBlocks';
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 
 interface AppProps {
@@ -43,6 +47,7 @@ export default function App({ initialData = null }: AppProps) {
     total: number;
   } | null>(null);
   const [gridEpoch, setGridEpoch] = useState(0);
+  const [selectedBlock, setSelectedBlock] = useState<GridCellDto | null>(null);
 
   useEffect(() => {
     if (liveZones.length) {
@@ -70,6 +75,7 @@ export default function App({ initialData = null }: AppProps) {
   }, [cityConditions, zones]);
 
   const handleSelectZone = (zone: ZoneData) => {
+    setSelectedBlock(null);
     setSelectedZoneId(zone.id);
   };
 
@@ -259,48 +265,56 @@ export default function App({ initialData = null }: AppProps) {
         </div>
       )}
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-6">
+      <main className="flex-1 w-full mx-auto p-3 sm:p-4 lg:p-5 space-y-5 max-w-[1600px]">
         {activeTab === 'dashboard' && (
-          <div
-            className={
-              mapFullscreen ? '' : 'grid lg:grid-cols-12 gap-5 items-start'
-            }
-          >
-            <div
-              className={
-                mapFullscreen ? '' : 'lg:col-span-7 xl:col-span-8 space-y-3'
-              }
-            >
+          <div className="space-y-5">
+            <div className="relative">
               <ZoneMapLazy
                 zones={zones}
                 selectedZoneId={selectedZoneId}
                 onSelectZone={handleSelectZone}
+                selectedBlockId={selectedBlock?.cellId ?? null}
+                onSelectBlock={setSelectedBlock}
                 overlay={mapOverlay}
                 setOverlay={setMapOverlay}
                 fullscreen={mapFullscreen}
                 onToggleFullscreen={() => setMapFullscreen((v) => !v)}
                 gridEpoch={gridEpoch}
               />
+
+              {selectedBlock && !mapFullscreen && (
+                <div className="absolute top-14 right-3 w-[min(calc(100%-1.5rem),320px)] z-[120]">
+                  <BlockDetailPanel
+                    cell={selectedBlock}
+                    cellSizeM={DISPLAY_BLOCK_M}
+                    onClose={() => setSelectedBlock(null)}
+                  />
+                </div>
+              )}
+
+              {mapFullscreen && selectedBlock && (
+                <div className="fixed top-20 right-3 w-[min(100vw-1.5rem,320px)] z-[220]">
+                  <BlockDetailPanel
+                    cell={selectedBlock}
+                    cellSizeM={DISPLAY_BLOCK_M}
+                    onClose={() => setSelectedBlock(null)}
+                  />
+                </div>
+              )}
             </div>
 
             {!mapFullscreen && (
-              <div className="lg:col-span-5 xl:col-span-4 sticky top-20">
+              <div>
+                <h3 className="font-heading font-extrabold text-sm uppercase text-[#1F3D2E] mb-2 tracking-wide">
+                  Zone rollup
+                </h3>
                 <ZoneDetailPanel
                   zone={selectedZone}
                   onClose={() => setSelectedZoneId(null)}
-                  onSelectAnotherZone={(id) => setSelectedZoneId(id)}
-                  allZones={zones}
-                  weatherAsOf={freshness?.weatherAsOf}
-                />
-              </div>
-            )}
-
-            {mapFullscreen && selectedZone && (
-              <div className="fixed top-20 right-3 bottom-16 w-[min(100vw-1.5rem,360px)] z-[210] overflow-y-auto shadow-2xl">
-                <ZoneDetailPanel
-                  zone={selectedZone}
-                  onClose={() => setSelectedZoneId(null)}
-                  onSelectAnotherZone={(id) => setSelectedZoneId(id)}
+                  onSelectAnotherZone={(id) => {
+                    setSelectedBlock(null);
+                    setSelectedZoneId(id);
+                  }}
                   allZones={zones}
                   weatherAsOf={freshness?.weatherAsOf}
                 />
@@ -309,10 +323,15 @@ export default function App({ initialData = null }: AppProps) {
           </div>
         )}
 
+        {activeTab === 'signatures' && (
+          <IctSignaturesMap gridEpoch={gridEpoch} />
+        )}
+
         {activeTab === 'overview' && (
           <CityRiskOverview
             zones={zones}
             onSelectZone={(zone) => {
+              setSelectedBlock(null);
               setSelectedZoneId(zone.id);
               setActiveTab('dashboard');
             }}

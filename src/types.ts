@@ -78,7 +78,12 @@ export interface DataFreshnessState {
   dengueScrapeError?: string;
 }
 
-export type ActiveTab = 'dashboard' | 'overview' | 'methodology' | 'admin';
+export type ActiveTab =
+  | 'dashboard'
+  | 'signatures'
+  | 'overview'
+  | 'methodology'
+  | 'admin';
 
 export type MapOverlay = 'risk' | 'vegetation' | 'cases' | 'terrain';
 

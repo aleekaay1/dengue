@@ -9,24 +9,24 @@ import { TEHSILS } from '../../lib/zoneMeta';
 import {
   cellFillColor,
   cellIntensity,
-  cellPopupHtml,
   type GridCellDto,
 } from './gridMapUtils';
+import { unpackGridPack, type GridPackFile } from '../lib/unpackGridPack';
 import {
-  cellsInView,
-  unpackGridPack,
-  type GridPackFile,
-} from '../lib/unpackGridPack';
+  aggregateToDisplayBlocks,
+  DISPLAY_BLOCK_M,
+} from '../lib/aggregateBlocks';
 
 interface ZoneMapProps {
   zones: ZoneData[];
   selectedZoneId: string | null;
   onSelectZone: (zone: ZoneData) => void;
+  selectedBlockId: string | null;
+  onSelectBlock: (cell: GridCellDto | null) => void;
   overlay: MapOverlay;
   setOverlay: (overlay: MapOverlay) => void;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
-  /** Bumps when a full analyzing refresh finishes — reload cells from Supabase */
   gridEpoch?: number;
 }
 
@@ -36,8 +36,6 @@ type MapGrain = 'blocks' | 'zones';
 
 const ISLAMABAD_CENTER: L.LatLngExpression = [33.6938, 73.0652];
 const DEFAULT_ZOOM = 12;
-/** Solid rectangles from this zoom; below that, thinned rects still drawn in Blocks */
-const CELL_RECT_ZOOM = 11;
 
 const HEAT_GRADIENT: Record<string, string> = {
   0.15: '#1d4ed8',
@@ -47,34 +45,12 @@ const HEAT_GRADIENT: Record<string, string> = {
   1.0: '#dc2626',
 };
 
-const VEG_GRADIENT: Record<string, string> = {
-  0.2: '#d9f99d',
-  0.45: '#86efac',
-  0.7: '#16a34a',
-  1.0: '#14532d',
-};
-
-const CASES_GRADIENT: Record<string, string> = {
-  0.2: '#fde68a',
-  0.45: '#fb923c',
-  0.7: '#dc2626',
-  1.0: '#7f1d1d',
-};
-
-const TERRAIN_GRADIENT: Record<string, string> = {
-  0.15: '#e0f2fe',
-  0.4: '#38bdf8',
-  0.65: '#0284c7',
-  1.0: '#0c4a6e',
-};
-
 function riskMarkerColor(level: ZoneData['riskLevel']): string {
   if (level === 'high') return '#B5432A';
   if (level === 'medium') return '#D9A441';
   return '#4C8C6B';
 }
 
-/** Soft zone-center heat only (no synthetic spoke lattice) */
 function zoneCenterHeat(
   zones: ZoneData[],
   overlay: MapOverlay
@@ -96,34 +72,12 @@ function zoneCenterHeat(
   });
 }
 
-/** leaflet.heat reads pixels often — prefer willReadFrequently to silence Canvas2D warning */
-function withWillReadFrequently<T>(fn: () => T): T {
-  const proto = HTMLCanvasElement.prototype;
-  const orig = proto.getContext;
-  proto.getContext = function (
-    this: HTMLCanvasElement,
-    type: string,
-    attrs?: CanvasRenderingContext2DSettings
-  ) {
-    if (type === '2d') {
-      return orig.call(this, type, {
-        ...attrs,
-        willReadFrequently: true,
-      });
-    }
-    return orig.call(this, type as '2d', attrs);
-  } as typeof orig;
-  try {
-    return fn();
-  } finally {
-    proto.getContext = orig;
-  }
-}
-
 export const ZoneMap: React.FC<ZoneMapProps> = ({
   zones,
   selectedZoneId,
   onSelectZone,
+  selectedBlockId,
+  onSelectBlock,
   overlay,
   setOverlay,
   fullscreen,
@@ -135,32 +89,31 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
   const heatRef = useRef<L.HeatLayer | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
   const cellsRef = useRef<L.LayerGroup | null>(null);
-  const onSelectRef = useRef(onSelectZone);
+  const onSelectZoneRef = useRef(onSelectZone);
+  const onSelectBlockRef = useRef(onSelectBlock);
   const fitKeyRef = useRef('');
   const overlayRef = useRef(overlay);
   const grainRef = useRef<MapGrain>('blocks');
+  const selectedBlockRef = useRef(selectedBlockId);
 
   const [hoveredZone, setHoveredZone] = useState<ZoneData | null>(null);
   const [areaFilter, setAreaFilter] = useState<AreaFilter>('all');
   const [tehsilFilter, setTehsilFilter] = useState<TehsilFilter>('all');
   const [mapGrain, setMapGrain] = useState<MapGrain>('blocks');
-  const [packCells, setPackCells] = useState<GridCellDto[]>([]);
-  const [viewCells, setViewCells] = useState<GridCellDto[]>([]);
-  const [cellSizeM, setCellSizeM] = useState(50);
+  const [displayBlocks, setDisplayBlocks] = useState<GridCellDto[]>([]);
   const [gridMeta, setGridMeta] = useState<{
     count: number;
+    sourceCount: number;
     computedAt: string | null;
-    source: string;
   } | null>(null);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
-  const [gridStatus, setGridStatus] = useState<'loading' | 'ready' | 'empty'>(
-    'loading'
-  );
   const [moveTick, setMoveTick] = useState(0);
 
-  onSelectRef.current = onSelectZone;
+  onSelectZoneRef.current = onSelectZone;
+  onSelectBlockRef.current = onSelectBlock;
   overlayRef.current = overlay;
   grainRef.current = mapGrain;
+  selectedBlockRef.current = selectedBlockId;
 
   const filteredZones = useMemo(() => {
     return zones.filter((z) => {
@@ -175,60 +128,27 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     return TEHSILS.filter((t) => present.has(t));
   }, [zones]);
 
-  // ALWAYS load static pack in the browser (Vercel serverless /api/grid often
-  // fails on the 6MB unpack). Supabase bbox is an optional fresher overlay.
+  // Load pack → filter empty/river → aggregate to ~200 m display blocks
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      setGridStatus('loading');
       try {
         const packRes = await fetch(
-          `/grid_cells_pack.json?v=${encodeURIComponent(String(gridEpoch))}&cb=2`
+          `/grid_cells_pack.json?v=${encodeURIComponent(String(gridEpoch))}&cb=3`
         );
-        if (packRes.ok) {
-          const raw = (await packRes.json()) as GridPackFile;
-          const unpacked = unpackGridPack(raw);
-          if (!cancelled && unpacked.cells.length) {
-            setPackCells(unpacked.cells);
-            setViewCells(unpacked.cells); // draw immediately — don't wait for map/API
-            setCellSizeM(unpacked.cellSizeM);
-            setGridMeta({
-              count: unpacked.cells.length,
-              computedAt: unpacked.computedAt,
-              source: 'static-pack',
-            });
-            setGridStatus('ready');
-          } else if (!cancelled) {
-            setGridStatus('empty');
-          }
-        } else if (!cancelled) {
-          setGridStatus('empty');
-        }
-
-        // Optional: prefer Supabase/API meta if populated after refresh
-        try {
-          const summaryRes = await fetch('/api/grid?summary=1');
-          if (summaryRes.ok && !cancelled) {
-            const summary = (await summaryRes.json()) as {
-              cellCount?: number;
-              computedAt?: string | null;
-              cellSizeM?: number;
-              source?: string;
-            };
-            if ((summary.cellCount ?? 0) > 0 && summary.source === 'supabase') {
-              setGridMeta({
-                count: summary.cellCount ?? 0,
-                computedAt: summary.computedAt ?? null,
-                source: 'supabase',
-              });
-              if (summary.cellSizeM) setCellSizeM(summary.cellSizeM);
-            }
-          }
-        } catch {
-          /* pack already loaded */
-        }
+        if (!packRes.ok) return;
+        const raw = (await packRes.json()) as GridPackFile;
+        const unpacked = unpackGridPack(raw);
+        if (cancelled || !unpacked.cells.length) return;
+        const blocks = aggregateToDisplayBlocks(unpacked.cells);
+        setDisplayBlocks(blocks);
+        setGridMeta({
+          count: blocks.length,
+          sourceCount: unpacked.cells.length,
+          computedAt: unpacked.computedAt,
+        });
       } catch {
-        if (!cancelled) setGridStatus('empty');
+        /* empty */
       }
     })();
     return () => {
@@ -236,88 +156,14 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     };
   }, [gridEpoch]);
 
-  // Viewport: thin pack to visible cells; overlay Supabase when available
-  useEffect(() => {
-    if (mapGrain !== 'blocks') return;
-    const map = mapRef.current;
-    if (!map || gridStatus === 'loading') return;
-    if (!packCells.length && !viewCells.length) return;
-
-    let cancelled = false;
-    const b = map.getBounds().pad(0.12);
-    const bbox = {
-      west: b.getWest(),
-      south: b.getSouth(),
-      east: b.getEast(),
-      north: b.getNorth(),
-    };
-    const limit = map.getZoom() >= CELL_RECT_ZOOM ? 9000 : 3500;
-    const bboxStr = `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
-    const zoneFilter = new Set<string>(filteredZones.map((z) => z.id));
-
-    // Instant local filter so blocks never go blank while API is slow
-    if (packCells.length) {
-      const local = cellsInView(packCells, bbox, zoneFilter);
-      const step =
-        local.length > limit ? Math.ceil(local.length / limit) : 1;
-      setViewCells(local.filter((_, i) => i % step === 0));
-    }
-
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/grid?bbox=${encodeURIComponent(bboxStr)}&limit=${limit}`
-        );
-        if (!res.ok) return;
-        const body = (await res.json()) as {
-          cells?: GridCellDto[];
-          computedAt?: string | null;
-          source?: string;
-          count?: number;
-        };
-        // Only replace pack with live Supabase (not flaky file-backed API)
-        if (
-          !cancelled &&
-          body.source === 'supabase' &&
-          body.cells?.length
-        ) {
-          setViewCells(body.cells);
-          setGridMeta((prev) => ({
-            count: prev?.count ?? body.count ?? body.cells!.length,
-            computedAt: body.computedAt ?? prev?.computedAt ?? null,
-            source: 'supabase',
-          }));
-        }
-      } catch {
-        /* keep pack viewCells */
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    mapGrain,
-    zoom,
-    moveTick,
-    gridStatus,
-    packCells,
-    filteredZones,
-    gridEpoch,
-  ]);
-
   const heatPoints = useMemo(() => {
-    if (mapGrain === 'zones') {
-      return zoneCenterHeat(filteredZones, overlay);
-    }
-    // Blocks overview heat from thinned view/pack cells (real scores)
-    const src = viewCells.length ? viewCells : packCells;
-    if (!src.length) return zoneCenterHeat(filteredZones, overlay);
+    if (mapGrain === 'zones') return zoneCenterHeat(filteredZones, overlay);
     const zoneFilter = new Set(filteredZones.map((z) => z.id));
-    const step = Math.max(1, Math.ceil(src.length / 4000));
+    const src = displayBlocks.filter((c) => zoneFilter.has(c.zoneId));
+    // Overview heat: only elevated risk, thinned
     return src
-      .filter((c) => zoneFilter.has(c.zoneId))
-      .filter((_, i) => i % step === 0)
+      .filter((c) => c.riskScore >= 45)
+      .filter((_, i) => i % 2 === 0)
       .map(
         (c) =>
           [c.lat, c.lng, cellIntensity(c, overlay)] as [
@@ -326,25 +172,22 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
             number,
           ]
       );
-  }, [mapGrain, filteredZones, overlay, viewCells, packCells]);
+  }, [mapGrain, filteredZones, overlay, displayBlocks]);
 
   const redrawCellRects = useCallback(() => {
     const map = mapRef.current;
     const group = cellsRef.current;
     if (!map || !group) return;
     group.clearLayers();
-
     if (grainRef.current !== 'blocks') return;
-
-    const cells = viewCells.length ? viewCells : packCells;
-    if (!cells.length) return;
+    if (!displayBlocks.length) return;
 
     const bounds = map.getBounds();
-    const pad = 0.004;
+    const pad = 0.006;
     const zoneFilter = new Set(filteredZones.map((z) => z.id));
     const z = map.getZoom();
 
-    let visible = cells.filter(
+    let visible = displayBlocks.filter(
       (c) =>
         zoneFilter.has(c.zoneId) &&
         c.lat >= bounds.getSouth() - pad &&
@@ -353,8 +196,12 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         c.lng <= bounds.getEast() + pad
     );
 
-    // Zoomed out: still show solid blocks, just thinned
-    const maxDraw = z >= CELL_RECT_ZOOM ? 6000 : z >= 10 ? 2500 : 1200;
+    // Prefer medium+ risk when zoomed out
+    if (z < 12) {
+      visible = visible.filter((c) => c.riskScore >= 42);
+    }
+
+    const maxDraw = z >= 13 ? 900 : z >= 12 ? 550 : 320;
     const step =
       visible.length > maxDraw ? Math.ceil(visible.length / maxDraw) : 1;
 
@@ -362,30 +209,27 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       const c = visible[i];
       const intensity = cellIntensity(c, overlayRef.current);
       const fill = cellFillColor(intensity, overlayRef.current);
+      const selected = c.cellId === selectedBlockRef.current;
       const rect = L.rectangle(
         [
           [c.south, c.west],
           [c.north, c.east],
         ],
         {
-          color: 'rgba(20,30,20,0.35)',
-          weight: z >= CELL_RECT_ZOOM ? 0.55 : 0.25,
+          color: selected ? '#D9A441' : 'rgba(20,30,20,0.25)',
+          weight: selected ? 2 : 0.4,
           fillColor: fill,
-          fillOpacity: z >= CELL_RECT_ZOOM ? 0.9 : 0.72,
+          fillOpacity: selected ? 0.55 : 0.32,
           interactive: true,
         }
       );
-      const html = cellPopupHtml(c, cellSizeM);
-      rect.bindTooltip(html, {
-        direction: 'top',
-        sticky: true,
-        opacity: 1,
-        className: 'block-risk-tooltip',
+      rect.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        onSelectBlockRef.current(c);
       });
-      rect.bindPopup(html, { maxWidth: 340 });
       group.addLayer(rect);
     }
-  }, [viewCells, packCells, filteredZones, cellSizeM]);
+  }, [displayBlocks, filteredZones]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -395,29 +239,31 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       zoom: DEFAULT_ZOOM,
       zoomControl: true,
       attributionControl: true,
-      maxZoom: 19,
+      maxZoom: 18,
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · block grid 50m',
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · ~200m risk blocks',
     }).addTo(map);
 
     markersRef.current = L.layerGroup().addTo(map);
     cellsRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
-    const onMove = () => {
+    map.on('zoomend moveend', () => {
       setZoom(map.getZoom());
       setMoveTick((t) => t + 1);
-    };
-    map.on('zoomend moveend', onMove);
+    });
+    map.on('click', () => {
+      // click empty map clears block selection
+      onSelectBlockRef.current(null);
+    });
 
     requestAnimationFrame(() => map.invalidateSize());
 
     return () => {
-      map.off('zoomend moveend', onMove);
       map.remove();
       mapRef.current = null;
       heatRef.current = null;
@@ -428,13 +274,13 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
 
   useEffect(() => {
     redrawCellRects();
-  }, [redrawCellRects, overlay, mapGrain, zoom]);
+  }, [redrawCellRects, overlay, mapGrain, zoom, moveTick, selectedBlockId]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     requestAnimationFrame(() => map.invalidateSize());
-  }, [fullscreen]);
+  }, [fullscreen, selectedBlockId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -453,41 +299,20 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
       heatRef.current = null;
     }
 
-    // Blocks with solid rects: hide heat so lattice never dominates
-    if (mapGrain === 'blocks' && (viewCells.length || packCells.length)) {
-      if (map.getZoom() >= CELL_RECT_ZOOM - 1) return;
-    }
+    // Blocks mode: rectangles only (map stays readable)
+    if (mapGrain === 'blocks') return;
 
-    const gradient =
-      overlay === 'vegetation'
-        ? VEG_GRADIENT
-        : overlay === 'cases'
-          ? CASES_GRADIENT
-          : overlay === 'terrain'
-            ? TERRAIN_GRADIENT
-            : HEAT_GRADIENT;
-
-    const z = map.getZoom();
-    const layer = withWillReadFrequently(() =>
-      L.heatLayer(heatPoints, {
-        radius: mapGrain === 'zones' ? 48 : z >= 12 ? 28 : 36,
-        blur: mapGrain === 'zones' ? 42 : z >= 12 ? 24 : 32,
-        maxZoom: 17,
-        max: 1,
-        minOpacity: mapGrain === 'zones' ? 0.45 : 0.5,
-        gradient,
-      })
-    );
+    const layer = L.heatLayer(heatPoints, {
+      radius: 48,
+      blur: 42,
+      maxZoom: 17,
+      max: 1,
+      minOpacity: 0.4,
+      gradient: HEAT_GRADIENT,
+    });
     layer.addTo(map);
     heatRef.current = layer;
-  }, [
-    heatPoints,
-    overlay,
-    mapGrain,
-    zoom,
-    viewCells.length,
-    packCells.length,
-  ]);
+  }, [heatPoints, mapGrain, zoom]);
 
   useEffect(() => {
     const group = markersRef.current;
@@ -496,25 +321,32 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
 
     group.clearLayers();
 
+    // Zone markers only in Zones mode (or faint in Blocks)
     for (const zone of filteredZones) {
       const isSelected = zone.id === selectedZoneId;
       const marker = L.circleMarker(
         [zone.coordinates.lat, zone.coordinates.lng],
         {
-          radius: isSelected ? 9 : 6,
+          radius: isSelected ? 8 : mapGrain === 'zones' ? 6 : 4,
           color: isSelected ? '#EDE6D6' : '#14291F',
-          weight: isSelected ? 3 : 1.5,
+          weight: isSelected ? 2.5 : 1,
           fillColor: riskMarkerColor(zone.riskLevel),
-          fillOpacity: mapGrain === 'zones' ? 0.95 : 0.75,
+          fillOpacity: mapGrain === 'zones' ? 0.95 : 0.35,
         }
       );
 
-      marker.bindTooltip(
-        `<strong>${zone.name}</strong><br/>${zone.tehsil} · zone rollup<br/>Risk ${zone.riskScore}/100`,
-        { direction: 'top', offset: [0, -8], opacity: 0.95 }
-      );
+      marker.bindTooltip(`${zone.name} · ${zone.riskScore}`, {
+        direction: 'top',
+        offset: [0, -6],
+        opacity: 0.9,
+        sticky: false,
+      });
 
-      marker.on('click', () => onSelectRef.current(zone));
+      marker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        onSelectBlockRef.current(null);
+        onSelectZoneRef.current(zone);
+      });
       marker.on('mouseover', () => setHoveredZone(zone));
       marker.on('mouseout', () =>
         setHoveredZone((prev) => (prev?.id === zone.id ? null : prev))
@@ -530,9 +362,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           (z) => [z.coordinates.lat, z.coordinates.lng] as [number, number]
         )
       );
-      map.fitBounds(bounds.pad(0.2), {
+      map.fitBounds(bounds.pad(0.18), {
         animate: true,
-        maxZoom: mapGrain === 'blocks' ? 14 : 12,
+        maxZoom: mapGrain === 'blocks' ? 13 : 12,
       });
       fitKeyRef.current = fitKey;
     }
@@ -555,12 +387,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  const selectedName =
-    zones.find((z) => z.id === selectedZoneId)?.name ?? 'None';
-
   const shellClass = fullscreen
     ? 'fixed inset-0 z-[200] bg-[#14291F] flex flex-col'
-    : 'bg-[#14291F] border-2 border-[#2D5843] rounded-xs shadow-md overflow-hidden relative flex flex-col h-full min-h-[520px]';
+    : 'bg-[#14291F] border-2 border-[#2D5843] rounded-xs shadow-md overflow-hidden relative flex flex-col h-[min(70vh,640px)] min-h-[480px]';
 
   return (
     <div className={shellClass}>
@@ -568,14 +397,12 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 bg-[#D9A441] rounded-full" />
           <h2 className="font-heading font-extrabold text-sm uppercase tracking-wide text-[#EDE6D6]">
-            ICT Block Risk Map
+            ICT Risk Map
           </h2>
           <span className="font-mono-data text-[10px] text-[#EDE6D6]/50">
             {gridMeta
-              ? `${gridMeta.count.toLocaleString()} × ${cellSizeM}m · ${gridMeta.source}`
-              : gridStatus === 'loading'
-                ? 'Loading grid…'
-                : `${filteredZones.length} zones`}
+              ? `${gridMeta.count.toLocaleString()} × ~${DISPLAY_BLOCK_M}m blocks`
+              : 'Loading…'}
           </span>
         </div>
 
@@ -590,7 +417,10 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
               <button
                 key={key}
                 type="button"
-                onClick={() => setMapGrain(key)}
+                onClick={() => {
+                  setMapGrain(key);
+                  if (key === 'zones') onSelectBlock(null);
+                }}
                 className={`px-2.5 py-1 text-xs font-heading font-bold rounded-xs transition-colors ${
                   mapGrain === key
                     ? activeClass
@@ -607,7 +437,6 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
               [
                 ['risk', 'Risk', 'bg-[#D9A441] text-[#23241F]'],
                 ['vegetation', 'Canopy', 'bg-[#4C8C6B] text-white'],
-                ['cases', 'People', 'bg-[#B5432A] text-white'],
                 ['terrain', 'Terrain', 'bg-sky-700 text-white'],
               ] as const
             ).map(([key, label, activeClass]) => (
@@ -698,42 +527,32 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         ))}
       </div>
 
-      <div className={`relative flex-1 ${fullscreen ? 'min-h-0' : 'min-h-[420px]'}`}>
+      <div className="relative flex-1 min-h-0">
         <div ref={containerRef} className="absolute inset-0 z-0" />
 
-        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] shadow-lg z-[500] pointer-events-none max-w-[260px]">
-          <div className="font-heading font-bold text-xs uppercase mb-1.5 border-b border-[#2D5843] pb-1 flex items-center justify-between gap-2">
+        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] shadow-lg z-[500] pointer-events-none max-w-[220px]">
+          <div className="font-heading font-bold text-xs uppercase mb-1 flex items-center justify-between gap-2">
             <span>
               {mapGrain === 'blocks'
-                ? `${cellSizeM}m surveillance blocks`
+                ? `~${DISPLAY_BLOCK_M}m risk blocks`
                 : 'Zone rollup'}
             </span>
             <Layers className="w-3 h-3 text-[#D9A441]" />
           </div>
           <p className="text-[10px] text-[#EDE6D6]/70 mb-1.5 leading-snug">
             {mapGrain === 'blocks'
-              ? 'Hover a block for NDVI, LST, terrain, settlement & score factors. Cached in Supabase; Refresh re-analyzes live weather.'
-              : 'Zone markers only — switch to Blocks for 50m cells.'}
+              ? 'Click a block for details on the right. Empty/river cells hidden. Map stays visible under translucent fills.'
+              : 'Zone markers only — switch to Blocks for lat/lng cells.'}
           </p>
-          <div
-            className={`h-2 w-36 rounded-xs mb-1.5 bg-gradient-to-r ${
-              overlay === 'vegetation'
-                ? 'from-lime-200 via-green-500 to-green-950'
-                : overlay === 'cases'
-                  ? 'from-amber-200 via-orange-500 to-red-900'
-                  : overlay === 'terrain'
-                    ? 'from-sky-100 via-sky-500 to-sky-950'
-                    : 'from-blue-600 via-yellow-400 to-red-600'
-            }`}
-          />
+          <div className="h-2 w-36 rounded-xs mb-1 bg-gradient-to-r from-blue-600 via-yellow-400 to-red-600" />
           <div className="flex justify-between font-mono-data text-[10px] text-[#EDE6D6]/70">
             <span>Low</span>
             <span>High</span>
           </div>
         </div>
 
-        {hoveredZone && (
-          <div className="absolute top-3 right-3 bg-[#1F3D2E] border border-[#D9A441] p-3 rounded-xs shadow-2xl text-[#EDE6D6] z-[500] max-w-[260px] pointer-events-none">
+        {hoveredZone && mapGrain === 'zones' && (
+          <div className="absolute top-3 right-3 bg-[#1F3D2E] border border-[#D9A441] p-3 rounded-xs shadow-2xl text-[#EDE6D6] z-[500] max-w-[240px] pointer-events-none">
             <div className="flex items-center justify-between gap-2 border-b border-[#2D5843] pb-1.5 mb-1.5">
               <span className="font-heading font-extrabold text-sm text-white uppercase">
                 {hoveredZone.name}
@@ -744,26 +563,8 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
                 size="sm"
               />
             </div>
-            <div className="text-[10px] font-mono-data text-[#D9A441] mb-1.5 uppercase">
-              Zone rollup · {hoveredZone.tehsil}
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono-data text-[11px]">
-              <div>
-                <span className="text-[#EDE6D6]/50">Temp </span>
-                {hoveredZone.temperature}°C
-              </div>
-              <div>
-                <span className="text-[#EDE6D6]/50">Humidity </span>
-                {hoveredZone.humidity}%
-              </div>
-              <div>
-                <span className="text-[#EDE6D6]/50">NDVI </span>
-                {hoveredZone.vegetationIndex}
-              </div>
-              <div>
-                <span className="text-[#EDE6D6]/50">Terrain </span>
-                {hoveredZone.depressionRiskScore ?? 0}/100
-              </div>
+            <div className="text-[10px] font-mono-data text-[#D9A441] uppercase">
+              {hoveredZone.tehsil}
             </div>
           </div>
         )}
@@ -773,15 +574,16 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         <div className="flex items-center gap-1.5">
           <MapPin className="w-3.5 h-3.5 text-[#D9A441]" />
           <span>
-            Real 50m blocks · Open-Meteo + EE NDVI/LST + DEM seed
+            Exact lat/lng blocks · click for score
             {gridMeta?.computedAt
-              ? ` · ${gridMeta.computedAt.slice(0, 16).replace('T', ' ')}`
+              ? ` · ${gridMeta.computedAt.slice(0, 10)}`
               : ''}
           </span>
         </div>
         <div>
-          Selected:{' '}
-          <strong className="text-white font-bold">{selectedName}</strong>
+          {gridMeta
+            ? `from ${gridMeta.sourceCount.toLocaleString()} × 50m cells`
+            : ''}
         </div>
       </div>
     </div>

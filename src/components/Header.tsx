@@ -8,6 +8,7 @@ import {
   Database,
   ShieldAlert,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -79,6 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
           {(
             [
               ['dashboard', 'Map', Activity],
+              ['signatures', 'Signatures', Sparkles],
               ['overview', 'Zone ranking', ListOrdered],
               ['methodology', 'Methodology', BookOpen],
               ['admin', 'Data', Database],
@@ -86,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
           ).map(([tab, label, Icon]) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setActiveTab(tab as ActiveTab)}
               className={`flex items-center gap-2 px-4 py-2.5 text-xs font-heading font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${
                 activeTab === tab
                   ? 'border-[#D9A441] text-[#D9A441] bg-[#14291F]/60'
