@@ -27,6 +27,10 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty'>('loading');
   const [asOf, setAsOf] = useState<string | null>(null);
   const [scanned, setScanned] = useState(0);
+  const [threshold, setThreshold] = useState<{ min: number; max: number }>({
+    min: 0,
+    max: 0,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +38,7 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
       setStatus('loading');
       try {
         const res = await fetch(
-          `/grid_cells_pack.json?v=${encodeURIComponent(String(gridEpoch))}&sig=2`
+          `/grid_cells_pack.json?v=${encodeURIComponent(String(gridEpoch))}&sig=3`
         );
         if (!res.ok) {
           if (!cancelled) setStatus('empty');
@@ -43,17 +47,20 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
         const raw = (await res.json()) as GridPackFile;
         const { cells, computedAt } = unpackGridPack(raw);
         const pilot = filterCapitalPilot(cells);
+        // Adaptive: capital pack currently tops ~48 — absolute 52 matched nothing
         const found = extractRiskPeaks(pilot, {
-          minScore: 52,
-          minSettlement: 0.2,
-          minSeparationM: 220,
+          minScore: 40,
+          minSettlement: 0.12,
+          minSeparationM: 200,
           maxPeaks: 90,
+          scorePercentile: 0.88,
         });
         if (!cancelled) {
-          setPeaks(found);
+          setPeaks(found.peaks);
           setScanned(pilot.length);
           setAsOf(computedAt);
-          setStatus(found.length ? 'ready' : 'empty');
+          setThreshold({ min: found.minScore, max: found.maxScore });
+          setStatus(found.peaks.length ? 'ready' : 'empty');
         }
       } catch {
         if (!cancelled) setStatus('empty');
@@ -101,38 +108,41 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
     group.clearLayers();
 
     for (const c of peaks) {
-      const color = signatureColor(c.riskScore);
-      const radius = c.riskScore >= 70 ? 9 : c.riskScore >= 60 ? 7 : 6;
+      const color = signatureColor(c.riskScore, threshold.max || 100);
+      const rel = threshold.max
+        ? c.riskScore / threshold.max
+        : c.riskScore / 100;
+      const radius = rel >= 0.95 ? 9 : rel >= 0.9 ? 7 : 6;
       const marker = L.circleMarker([c.lat, c.lng], {
         radius,
-        color: '#14291F',
+        color: '#1a1d21',
         weight: 1.5,
         fillColor: color,
-        fillOpacity: 0.85,
+        fillOpacity: 0.88,
       });
       marker.bindPopup(
         `<div style="font:12px/1.4 system-ui,sans-serif;min-width:180px">
-          <strong>Elevated risk peak</strong><br/>
+          <strong>Higher-risk peak</strong><br/>
           Score <b>${c.riskScore}</b>/100 · ${c.riskLevel}<br/>
           <span style="opacity:.75">${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</span><br/>
-          NDVI ${c.ndvi.toFixed(2)} · settle ${Math.round(c.settlementDensity * 100)}%<br/>
+          Vegetation ${c.ndvi.toFixed(2)} · built-up ${Math.round(c.settlementDensity * 100)}%<br/>
           Temp ${c.temperature.toFixed(1)}°C · humidity ${c.humidity}%
           <div style="margin-top:6px;font-size:10px;opacity:.7">
-            Exact 50m cell center from scored pack — not a synthetic grid point.
+            Exact 50m cell from scored pack (top of local score range ${threshold.min}–${threshold.max}).
           </div>
         </div>`,
-        { maxWidth: 260 }
+        { maxWidth: 280 }
       );
       group.addLayer(marker);
     }
-  }, [peaks]);
+  }, [peaks, threshold.max, threshold.min]);
 
   const countLabel = useMemo(() => {
     if (status === 'loading') return 'Scanning scored cells…';
     if (status === 'empty')
-      return 'No elevated peaks above threshold in capital pilot';
-    return `${peaks.length} peaks · scanned ${scanned.toLocaleString()} cells`;
-  }, [status, peaks.length, scanned]);
+      return 'No peaks found in capital pilot cells';
+    return `${peaks.length} peaks · scores ≥ ${threshold.min} (max ${threshold.max}) · ${scanned.toLocaleString()} cells`;
+  }, [status, peaks.length, scanned, threshold]);
 
   return (
     <div className="bg-[#14291F] border-2 border-[#2D5843] rounded-xs shadow-md overflow-hidden flex flex-col min-h-[560px] h-[min(72vh,720px)]">
@@ -159,8 +169,8 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
             <Layers className="w-3 h-3 text-[#D9A441]" />
           </div>
           <p className="text-[10px] text-[#EDE6D6]/70 mb-1.5 leading-snug">
-            Each dot is a real 50 m cell center that clears the risk floor and
-            beats nearby cells (local maximum). Map stays visible underneath.
+            Each dot is a real 50 m cell among the highest scores in this area
+            (local maximum). Threshold follows the data — not a fixed 70/100.
           </p>
           <div className="flex gap-3 font-mono-data text-[10px]">
             <span>
