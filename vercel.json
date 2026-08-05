@@ -23,7 +23,7 @@
     { "source": "/api/cron/refresh", "destination": "/api/cron/refresh" },
     { "source": "/api/ssr", "destination": "/api/ssr" },
     {
-      "source": "/((?!assets/|grid_heat\\.json|grid_cells_pack\\.json|favicon\\.ico|.*\\.(png|jpg|svg|webp)$).*)",
+      "source": "/:path*",
       "destination": "/api/ssr"
     }
   ],
