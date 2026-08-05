@@ -175,11 +175,16 @@ async function main() {
         : lst;
     const airForRisk = clamp(wx.temperature + (lst - lstMean) * 0.4, 18, 36);
 
-    // Settlement denser near markaz / zone center
+    // Settlement from land-cover cues (NDVI + relief), mild edge fade — avoid
+    // hard circular “bullseyes” around every zone center
     const settle = clamp(
-      (c.areaType === 'urban' ? 0.75 : 0.4) * (1 - edge * 0.85) + relief * 0.1,
-      0.05,
-      0.95
+      (c.areaType === 'urban' ? 0.5 : 0.28) +
+        relief * 0.4 +
+        (ndvi < 0.28 ? 0.18 : 0) +
+        (ndvi > 0.42 ? -0.08 : 0) -
+        edge * 0.12,
+      0.08,
+      0.92
     );
     const population = Math.round(settle * 40);
 

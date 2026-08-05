@@ -111,3 +111,30 @@
   border-top-color: #d9a441;
 }
 
+/* Ministry block hover card — light panel with full factor breakdown */
+.leaflet-tooltip.block-risk-tooltip {
+  background: #f7f4ec;
+  border: 2px solid #1f3d2e;
+  color: #23241f;
+  padding: 0;
+  max-width: 340px;
+  white-space: normal;
+  box-shadow: 0 8px 24px rgba(20, 41, 31, 0.35);
+}
+
+.leaflet-tooltip.block-risk-tooltip.leaflet-tooltip-top:before {
+  border-top-color: #1f3d2e;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #f7f4ec;
+  border: 2px solid #1f3d2e;
+  border-radius: 2px;
+  color: #23241f;
+}
+
+.leaflet-popup-tip {
+  background: #f7f4ec;
+  border: 1px solid #1f3d2e;
+}
+

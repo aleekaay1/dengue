@@ -1,7 +1,6 @@
 /**
  * Block-level grid risk loader.
  * Reads offline batch output (data/grid_cells_latest.json) — never computes on request.
- * Supports packed array format and legacy object cells.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -83,10 +82,18 @@ function unpack(raw: {
         settle100,
         risk,
         pop,
+        temp10,
+        hum,
+        rain10,
+        lst10,
       ] = row as number[];
       const zoneId = zoneIds[zIdx] ?? 'unknown';
       const riskScore = risk;
       const population = pop;
+      const temperature = (temp10 ?? 295) / 10;
+      const humidity = hum ?? 60;
+      const rainfall = (rain10 ?? 0) / 10;
+      const lst = (lst10 ?? temp10 ?? 350) / 10;
       cells.push({
         cellId: `ict_${raw.cellSizeM ?? 50}m_${i}`,
         lat,
@@ -98,10 +105,10 @@ function unpack(raw: {
         zoneId,
         tehsil: TEHSIL_BY_ZONE.get(zoneId) ?? '',
         ndvi: ndvi100 / 100,
-        lst: 0,
-        temperature: 0,
-        humidity: 0,
-        rainfall: 0,
+        lst,
+        temperature,
+        humidity,
+        rainfall,
         depressionScore: dep,
         settlementDensity: settle100 / 100,
         population,
@@ -110,8 +117,7 @@ function unpack(raw: {
         peopleAtRisk: Math.round(riskScore * population),
       });
     } else {
-      const c = row as GridCell;
-      cells.push(c);
+      cells.push(row as GridCell);
     }
   }
 

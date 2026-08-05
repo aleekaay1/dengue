@@ -30,8 +30,8 @@ type MapGrain = 'blocks' | 'zones';
 
 const ISLAMABAD_CENTER: L.LatLngExpression = [33.6938, 73.0652];
 const DEFAULT_ZOOM = 12;
-/** Above this zoom, draw true cell rectangles instead of heat blobs */
-const CELL_RECT_ZOOM = 14;
+/** Above this zoom, solid choropleth blocks (no heat lattice) */
+const CELL_RECT_ZOOM = 11;
 
 const HEAT_GRADIENT: Record<string, string> = {
   0.15: '#1d4ed8',
@@ -225,22 +225,23 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     };
   }, []);
 
-  // Load cell rectangles for the current view when zoomed in
+  // Always refresh visible cells in Blocks mode (choropleth + hover reasons)
   useEffect(() => {
-    if (zoom < CELL_RECT_ZOOM || mapGrain !== 'blocks') return;
+    if (mapGrain !== 'blocks') return;
     const map = mapRef.current;
     if (!map) return;
     let cancelled = false;
-    const b = map.getBounds();
+    const b = map.getBounds().pad(0.15);
     const bbox = [
       b.getWest(),
       b.getSouth(),
       b.getEast(),
       b.getNorth(),
     ].join(',');
+    const limit = map.getZoom() >= CELL_RECT_ZOOM ? 8000 : 2500;
     void (async () => {
       try {
-        const res = await fetch(`/api/grid?bbox=${bbox}&limit=6000`);
+        const res = await fetch(`/api/grid?bbox=${bbox}&limit=${limit}`);
         if (!res.ok) return;
         const body = (await res.json()) as { cells?: GridCellDto[] };
         if (!cancelled && body.cells?.length) setAllGridCells(body.cells);
@@ -254,35 +255,26 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
   }, [zoom, mapGrain]);
 
   const heatPoints = useMemo(() => {
+    // Zones mode: soft zone clouds. Blocks overview: thinned static heat (no lattice).
     if (mapGrain === 'zones' || !gridPoints?.length) {
       return zoneFallbackHeat(filteredZones, overlay);
     }
-    // Re-weight intensities client-side when overlay changes using cached cells
-    if (allGridCells.length && overlay !== 'risk') {
+    if (filteredZones.length < zones.length) {
       const zoneFilter = new Set(filteredZones.map((z) => z.id));
-      return allGridCells
-        .filter((c) => zoneFilter.has(c.zoneId))
-        .map(
-          (c) =>
-            [c.lat, c.lng, cellIntensity(c, overlay)] as [
-              number,
-              number,
-              number,
-            ]
-        );
-    }
-    if (filteredZones.length < zones.length && allGridCells.length) {
-      const zoneFilter = new Set(filteredZones.map((z) => z.id));
-      return allGridCells
-        .filter((c) => zoneFilter.has(c.zoneId))
-        .map(
-          (c) =>
-            [c.lat, c.lng, Math.max(0.05, c.riskScore / 100)] as [
-              number,
-              number,
-              number,
-            ]
-        );
+      // Prefer viewport cells when filtering
+      if (allGridCells.length) {
+        return allGridCells
+          .filter((c) => zoneFilter.has(c.zoneId))
+          .filter((_, i) => i % 3 === 0)
+          .map(
+            (c) =>
+              [c.lat, c.lng, cellIntensity(c, overlay)] as [
+                number,
+                number,
+                number,
+              ]
+          );
+      }
     }
     return gridPoints;
   }, [
@@ -305,11 +297,8 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
     if (!allGridCells.length) return;
 
     const bounds = map.getBounds();
-    const pad = 0.002;
-    const zoneFilter = new Set(
-      // use current filters via closure — refreshed when deps change
-      filteredZones.map((z) => z.id)
-    );
+    const pad = 0.003;
+    const zoneFilter = new Set(filteredZones.map((z) => z.id));
 
     const visible = allGridCells.filter(
       (c) =>
@@ -320,27 +309,34 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
         c.lng <= bounds.getEast() + pad
     );
 
-    // Street-level: every visible 50m rectangle is a real scored cell
-    const maxDraw = 4000;
+    const maxDraw = 5000;
     const step = visible.length > maxDraw ? Math.ceil(visible.length / maxDraw) : 1;
 
     for (let i = 0; i < visible.length; i += step) {
       const c = visible[i];
       const intensity = cellIntensity(c, overlayRef.current);
+      const fill = cellFillColor(intensity, overlayRef.current);
       const rect = L.rectangle(
         [
           [c.south, c.west],
           [c.north, c.east],
         ],
         {
-          color: 'transparent',
-          weight: 0,
-          fillColor: cellFillColor(intensity, overlayRef.current),
-          fillOpacity: 0.72,
+          color: 'rgba(20,30,20,0.45)',
+          weight: 0.6,
+          fillColor: fill,
+          fillOpacity: 0.88,
           interactive: true,
         }
       );
-      rect.bindPopup(cellPopupHtml(c, cellSizeM), { maxWidth: 280 });
+      const html = cellPopupHtml(c, cellSizeM);
+      rect.bindTooltip(html, {
+        direction: 'top',
+        sticky: true,
+        opacity: 1,
+        className: 'block-risk-tooltip',
+      });
+      rect.bindPopup(html, { maxWidth: 340 });
       group.addLayer(rect);
     }
   }, [allGridCells, filteredZones, cellSizeM]);
@@ -433,27 +429,25 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
             ? TERRAIN_GRADIENT
             : HEAT_GRADIENT;
 
-    // City overview needs a larger radius so 50m cells read as a continuous surface
+    // Blocks at z11+: solid rectangles only — hide heat so the lattice of dots never shows
+    if (mapGrain === 'blocks' && map.getZoom() >= CELL_RECT_ZOOM) {
+      return;
+    }
+
     const z = map.getZoom();
-    const radiusPx =
-      z >= 16 ? 10 : z >= 14 ? 14 : z >= 12 ? 22 : 28;
-    const blurPx = z >= 14 ? 10 : 18;
+    const radiusPx = z >= 12 ? 32 : 40;
+    const blurPx = z >= 12 ? 28 : 36;
 
     const layer = L.heatLayer(heatPoints, {
       radius: radiusPx,
       blur: blurPx,
-      maxZoom: 18,
+      maxZoom: 17,
       max: 1,
-      minOpacity: 0.45,
+      minOpacity: 0.55,
       gradient,
     });
     layer.addTo(map);
     heatRef.current = layer;
-
-    const el = (layer as unknown as { _canvas?: HTMLCanvasElement })._canvas;
-    if (el) {
-      el.style.opacity = z >= CELL_RECT_ZOOM && mapGrain === 'blocks' ? '0.35' : '1';
-    }
   }, [heatPoints, overlay, mapGrain, cellSizeM, gridPoints?.length, zoom]);
 
   useEffect(() => {
@@ -670,9 +664,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           <div className="font-heading font-bold text-xs uppercase mb-1.5 border-b border-[#2D5843] pb-1 flex items-center justify-between gap-2">
             <span>
               {zoom >= CELL_RECT_ZOOM && mapGrain === 'blocks'
-                ? `${cellSizeM}m block cells`
+                ? `${cellSizeM}m surveillance blocks`
                 : overlay === 'risk'
-                  ? 'Block risk heat'
+                  ? 'Block risk overview'
                   : overlay === 'vegetation'
                     ? 'Canopy (NDVI)'
                     : overlay === 'terrain'
@@ -683,8 +677,8 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({
           </div>
           <p className="text-[10px] text-[#EDE6D6]/70 mb-1.5 leading-snug">
             {zoom >= CELL_RECT_ZOOM && mapGrain === 'blocks'
-              ? 'Zoomed in: each rectangle is a scored grid cell (click for factors). Not household-level.'
-              : 'Zoom in (z14+) for sharp block rectangles instead of heat clouds.'}
+              ? 'Hover any block for NDVI, LST, terrain, settlement & score factors. Not household-level.'
+              : 'Zoom in for solid coloured blocks with hover explanations (ministry view).'}
           </p>
           <div
             className={`h-2 w-36 rounded-xs mb-1.5 bg-gradient-to-r ${

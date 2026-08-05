@@ -9,10 +9,11 @@ if (!src) {
   process.exit(1);
 }
 const h = JSON.parse(readFileSync(src, 'utf8'));
-const pts = (h.points || []).filter((_, i) => i % 2 === 0).map((p) => [
+// Prefer already-thinned pack output; boost intensity for readable overview
+const pts = (h.points || []).map((p) => [
   p[0],
   p[1],
-  Math.min(1, Math.max(0.15, Number(p[2]) * 1.35)),
+  Math.min(1, Math.max(0.22, Number(p[2]) * 1.2)),
 ]);
 const out = {
   cellSizeM: h.cellSizeM || 50,
