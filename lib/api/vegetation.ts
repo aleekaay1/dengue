@@ -19,19 +19,18 @@ const STATIC_NDVI: Record<
   string,
   { vegetationIndex: number; shadeCoverage: number; asOfDate: string }
 > = {
-  // Confirmed EE (urban)
+  // EE Console 2026-08-05 — S2 SR median 2026-06-01→07-31 (+ LST in data/ee_zone_ndvi_lst.json)
   'zone-f6': { vegetationIndex: 0.36, shadeCoverage: 36, asOfDate: '2026-07-31' },
   'zone-f7': { vegetationIndex: 0.36, shadeCoverage: 36, asOfDate: '2026-07-31' },
-  'zone-bluearea': { vegetationIndex: 0.34, shadeCoverage: 34, asOfDate: '2026-07-31' },
+  'zone-bluearea': { vegetationIndex: 0.33, shadeCoverage: 33, asOfDate: '2026-07-31' },
   'zone-f8': { vegetationIndex: 0.33, shadeCoverage: 33, asOfDate: '2026-07-31' },
   'zone-g6': { vegetationIndex: 0.4, shadeCoverage: 40, asOfDate: '2026-07-31' },
   'zone-g9': { vegetationIndex: 0.3, shadeCoverage: 30, asOfDate: '2026-07-31' },
-  'zone-f10': { vegetationIndex: 0.36, shadeCoverage: 36, asOfDate: '2026-07-31' },
+  'zone-f10': { vegetationIndex: 0.35, shadeCoverage: 35, asOfDate: '2026-07-31' },
   'zone-g11': { vegetationIndex: 0.23, shadeCoverage: 23, asOfDate: '2026-07-31' },
   'zone-i8': { vegetationIndex: 0.28, shadeCoverage: 28, asOfDate: '2026-07-31' },
   'zone-diplomatic': { vegetationIndex: 0.41, shadeCoverage: 41, asOfDate: '2026-07-31' },
-  // Earth Engine Sentinel-2 SR median (2026-06-01 → 2026-07-31, 1000m buffer)
-  'zone-bharakahu': { vegetationIndex: 0.19, shadeCoverage: 19, asOfDate: '2026-07-31' },
+  'zone-bharakahu': { vegetationIndex: 0.18, shadeCoverage: 18, asOfDate: '2026-07-31' },
   'zone-banigala': { vegetationIndex: 0.47, shadeCoverage: 47, asOfDate: '2026-07-31' },
   'zone-nilore': { vegetationIndex: 0.26, shadeCoverage: 26, asOfDate: '2026-07-31' },
   'zone-chirah': { vegetationIndex: 0.31, shadeCoverage: 31, asOfDate: '2026-07-31' },

@@ -1,0 +1,123 @@
+{
+  "type": "ee_ict_block_layers",
+  "start": "2026-06-01",
+  "end": "2026-07-31",
+  "computedAt": "2026-08-05T17:40:23.650Z",
+  "demNote": "Use COPERNICUS/DEM/GLO30 separately for depressions if needed",
+  "zoneLayers": [
+    {
+      "zoneId": "zone-f6",
+      "name": "F-6",
+      "ndvi": 0.3571127529919347,
+      "lst": 38.03982146892135
+    },
+    {
+      "zoneId": "zone-f7",
+      "name": "F-7",
+      "ndvi": 0.35824458899097755,
+      "lst": 38.09365316842473
+    },
+    {
+      "zoneId": "zone-bluearea",
+      "name": "Blue Area",
+      "ndvi": 0.3346146145902258,
+      "lst": 39.18588126223083
+    },
+    {
+      "zoneId": "zone-f8",
+      "name": "F-8",
+      "ndvi": 0.3302425803260538,
+      "lst": 39.36194620940781
+    },
+    {
+      "zoneId": "zone-g6",
+      "name": "G-6",
+      "ndvi": 0.39789969521099133,
+      "lst": 39.24608199247701
+    },
+    {
+      "zoneId": "zone-diplomatic",
+      "name": "Diplomatic",
+      "ndvi": 0.4076834125759273,
+      "lst": 38.85884637817863
+    },
+    {
+      "zoneId": "zone-g9",
+      "name": "G-9",
+      "ndvi": 0.304746405904573,
+      "lst": 40.1483330199035
+    },
+    {
+      "zoneId": "zone-f10",
+      "name": "F-10/F-11",
+      "ndvi": 0.3548758739817757,
+      "lst": 39.107291189969516
+    },
+    {
+      "zoneId": "zone-g11",
+      "name": "G-11/G-13",
+      "ndvi": 0.23048386213052185,
+      "lst": 42.183251836022066
+    },
+    {
+      "zoneId": "zone-i8",
+      "name": "I-8/I-9",
+      "ndvi": 0.28307710381143697,
+      "lst": 41.73566023834392
+    },
+    {
+      "zoneId": "zone-bharakahu",
+      "name": "Bharakahu",
+      "ndvi": 0.1848864313431521,
+      "lst": 40.11579376195178
+    },
+    {
+      "zoneId": "zone-banigala",
+      "name": "Banigala",
+      "ndvi": 0.4707162675500679,
+      "lst": 37.306061473777014
+    },
+    {
+      "zoneId": "zone-nilore",
+      "name": "Nilore",
+      "ndvi": 0.2551733170952679,
+      "lst": 41.86319626927218
+    },
+    {
+      "zoneId": "zone-chirah",
+      "name": "Chirah",
+      "ndvi": 0.31097414480344066,
+      "lst": 41.232412158005
+    },
+    {
+      "zoneId": "zone-tarnol",
+      "name": "Tarnol",
+      "ndvi": 0.2396493468258835,
+      "lst": 42.561153747744605
+    },
+    {
+      "zoneId": "zone-golra",
+      "name": "Golra",
+      "ndvi": 0.2776705385110453,
+      "lst": 43.081998805709134
+    },
+    {
+      "zoneId": "zone-sihala",
+      "name": "Sihala",
+      "ndvi": 0.36514783515046384,
+      "lst": 41.81013477266754
+    },
+    {
+      "zoneId": "zone-rawat",
+      "name": "Rawat",
+      "ndvi": 0.25619328832315746,
+      "lst": 41.60629118033068
+    },
+    {
+      "zoneId": "zone-koral",
+      "name": "Koral",
+      "ndvi": 0.3020883727111861,
+      "lst": 40.83136148607655
+    }
+  ]
+}
