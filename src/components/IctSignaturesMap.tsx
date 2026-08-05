@@ -1,37 +1,32 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import 'leaflet.heat';
+import { CAPITAL_PILOT_BBOX, filterCapitalPilot } from '../lib/aggregateBlocks';
 import {
-  aggregateToDisplayBlocks,
-  CAPITAL_PILOT_BBOX,
-  filterCapitalPilot,
-} from '../lib/aggregateBlocks';
+  extractRiskPeaks,
+  signatureColor,
+} from '../lib/riskSignatures';
 import { unpackGridPack, type GridPackFile } from '../lib/unpackGridPack';
+import type { GridCellDto } from './gridMapUtils';
 import { Layers } from 'lucide-react';
 
 const CENTER: L.LatLngExpression = [33.71, 73.06];
-const GRADIENT: Record<string, string> = {
-  0.2: '#3b82f6',
-  0.4: '#22c55e',
-  0.55: '#eab308',
-  0.75: '#f97316',
-  1.0: '#dc2626',
-};
 
 /**
- * Clean ICT capital-territory risk signatures — no zone markers, no block lattice.
- * Soft heat from real aggregated cell scores inside the urban pilot bbox.
+ * Capital-territory risk signatures — discrete peaks only.
+ * Uses exact 50 m cell lat/lng from the scored pack (Open-Meteo + EE NDVI/LST).
+ * No heat lattice, no zone markers, no invented points.
  */
 export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
   gridEpoch = 0,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const heatRef = useRef<L.HeatLayer | null>(null);
-  const [points, setPoints] = useState<[number, number, number][]>([]);
+  const layerRef = useRef<L.LayerGroup | null>(null);
+  const [peaks, setPeaks] = useState<GridCellDto[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty'>('loading');
   const [asOf, setAsOf] = useState<string | null>(null);
+  const [scanned, setScanned] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +34,7 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
       setStatus('loading');
       try {
         const res = await fetch(
-          `/grid_cells_pack.json?v=${encodeURIComponent(String(gridEpoch))}&sig=1`
+          `/grid_cells_pack.json?v=${encodeURIComponent(String(gridEpoch))}&sig=2`
         );
         if (!res.ok) {
           if (!cancelled) setStatus('empty');
@@ -48,19 +43,17 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
         const raw = (await res.json()) as GridPackFile;
         const { cells, computedAt } = unpackGridPack(raw);
         const pilot = filterCapitalPilot(cells);
-        const blocks = aggregateToDisplayBlocks(pilot);
-        // Signatures: medium+ risk only, soft intensity
-        const pts: [number, number, number][] = blocks
-          .filter((c) => c.riskScore >= 40)
-          .map((c) => [
-            c.lat,
-            c.lng,
-            Math.min(1, Math.max(0.28, (c.riskScore / 100) * 1.15)),
-          ]);
+        const found = extractRiskPeaks(pilot, {
+          minScore: 52,
+          minSettlement: 0.2,
+          minSeparationM: 220,
+          maxPeaks: 90,
+        });
         if (!cancelled) {
-          setPoints(pts);
+          setPeaks(found);
+          setScanned(pilot.length);
           setAsOf(computedAt);
-          setStatus(pts.length ? 'ready' : 'empty');
+          setStatus(found.length ? 'ready' : 'empty');
         }
       } catch {
         if (!cancelled) setStatus('empty');
@@ -83,7 +76,7 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution:
-        '&copy; OpenStreetMap · ICT capital risk signatures (pilot)',
+        '&copy; OpenStreetMap · real elevated-risk cell peaks (not a heat lattice)',
     }).addTo(map);
     map.fitBounds(
       [
@@ -92,40 +85,54 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
       ],
       { padding: [24, 24], maxZoom: 13 }
     );
+    layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     requestAnimationFrame(() => map.invalidateSize());
     return () => {
       map.remove();
       mapRef.current = null;
-      heatRef.current = null;
+      layerRef.current = null;
     };
   }, []);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (heatRef.current) {
-      map.removeLayer(heatRef.current);
-      heatRef.current = null;
+    const group = layerRef.current;
+    if (!group) return;
+    group.clearLayers();
+
+    for (const c of peaks) {
+      const color = signatureColor(c.riskScore);
+      const radius = c.riskScore >= 70 ? 9 : c.riskScore >= 60 ? 7 : 6;
+      const marker = L.circleMarker([c.lat, c.lng], {
+        radius,
+        color: '#14291F',
+        weight: 1.5,
+        fillColor: color,
+        fillOpacity: 0.85,
+      });
+      marker.bindPopup(
+        `<div style="font:12px/1.4 system-ui,sans-serif;min-width:180px">
+          <strong>Elevated risk peak</strong><br/>
+          Score <b>${c.riskScore}</b>/100 · ${c.riskLevel}<br/>
+          <span style="opacity:.75">${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</span><br/>
+          NDVI ${c.ndvi.toFixed(2)} · settle ${Math.round(c.settlementDensity * 100)}%<br/>
+          Temp ${c.temperature.toFixed(1)}°C · humidity ${c.humidity}%
+          <div style="margin-top:6px;font-size:10px;opacity:.7">
+            Exact 50m cell center from scored pack — not a synthetic grid point.
+          </div>
+        </div>`,
+        { maxWidth: 260 }
+      );
+      group.addLayer(marker);
     }
-    if (!points.length) return;
-    const layer = L.heatLayer(points, {
-      radius: 36,
-      blur: 32,
-      maxZoom: 16,
-      max: 1,
-      minOpacity: 0.35,
-      gradient: GRADIENT,
-    });
-    layer.addTo(map);
-    heatRef.current = layer;
-  }, [points]);
+  }, [peaks]);
 
   const countLabel = useMemo(() => {
-    if (status === 'loading') return 'Loading signatures…';
-    if (status === 'empty') return 'No signature points';
-    return `${points.length.toLocaleString()} risk signatures · capital pilot`;
-  }, [status, points.length]);
+    if (status === 'loading') return 'Scanning scored cells…';
+    if (status === 'empty')
+      return 'No elevated peaks above threshold in capital pilot';
+    return `${peaks.length} peaks · scanned ${scanned.toLocaleString()} cells`;
+  }, [status, peaks.length, scanned]);
 
   return (
     <div className="bg-[#14291F] border-2 border-[#2D5843] rounded-xs shadow-md overflow-hidden flex flex-col min-h-[560px] h-[min(72vh,720px)]">
@@ -135,7 +142,7 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
             ICT Capital Territory — Risk signatures
           </h2>
           <p className="font-mono-data text-[10px] text-[#EDE6D6]/55 mt-0.5">
-            Clean map · no zones · no block grid · urban pilot only
+            Real cell peaks only · no heat lattice · no invented marks
           </p>
         </div>
         <span className="font-mono-data text-[10px] text-[#D9A441]">
@@ -146,19 +153,28 @@ export const IctSignaturesMap: React.FC<{ gridEpoch?: number }> = ({
 
       <div className="relative flex-1 min-h-[420px]">
         <div ref={containerRef} className="absolute inset-0 z-0" />
-        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] z-[500] pointer-events-none max-w-[220px]">
+        <div className="absolute bottom-3 left-3 bg-[#1F3D2E]/95 border border-[#2D5843] p-2.5 rounded-xs text-[11px] text-[#EDE6D6] z-[500] pointer-events-none max-w-[240px]">
           <div className="font-heading font-bold text-xs uppercase mb-1 flex items-center justify-between gap-2">
-            <span>Activity signature</span>
+            <span>Elevated peaks</span>
             <Layers className="w-3 h-3 text-[#D9A441]" />
           </div>
-          <p className="text-[10px] text-[#EDE6D6]/65 mb-1.5 leading-snug">
-            Soft heat from real block scores (medium+). Not tied to zone
-            polygons.
+          <p className="text-[10px] text-[#EDE6D6]/70 mb-1.5 leading-snug">
+            Each dot is a real 50 m cell center that clears the risk floor and
+            beats nearby cells (local maximum). Map stays visible underneath.
           </p>
-          <div className="h-2 w-36 rounded-xs mb-1 bg-gradient-to-r from-blue-500 via-yellow-400 to-red-600" />
-          <div className="flex justify-between font-mono-data text-[10px] text-[#EDE6D6]/60">
-            <span>Lower</span>
-            <span>Higher</span>
+          <div className="flex gap-3 font-mono-data text-[10px]">
+            <span>
+              <span className="inline-block w-2 h-2 rounded-full bg-[#D9A441] mr-1" />
+              med
+            </span>
+            <span>
+              <span className="inline-block w-2 h-2 rounded-full bg-[#D97706] mr-1" />
+              high
+            </span>
+            <span>
+              <span className="inline-block w-2 h-2 rounded-full bg-[#B5432A] mr-1" />
+              severe
+            </span>
           </div>
         </div>
       </div>
