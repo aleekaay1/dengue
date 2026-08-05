@@ -15,6 +15,18 @@ async function main() {
     },
   });
 
+  // Ensure large static grid packs ship with the client output
+  for (const name of ['grid_cells_pack.json', 'grid_heat.json']) {
+    const from = path.join(root, 'public', name);
+    const to = path.join(root, 'dist/client', name);
+    if (fs.existsSync(from)) {
+      fs.copyFileSync(from, to);
+      console.log(`Copied public/${name} → dist/client/${name}`);
+    } else {
+      console.warn(`Missing public/${name} — Blocks map may be empty`);
+    }
+  }
+
   // Rename so Vercel does not serve the empty SPA shell ahead of /api/ssr
   const indexHtml = path.join(root, 'dist/client/index.html');
   const templateHtml = path.join(root, 'dist/client/app-template.html');
